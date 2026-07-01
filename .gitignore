@@ -1,0 +1,88 @@
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.fastRequest
+### IntelliJ IDEA ###
+.idea/modules.xml
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/libraries/
+*.iws
+*.iml
+*.ipr
+.idea/
+### Eclipse ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+logs/
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Mac OS ###
+.DS_Store
+.qoder
+
+# 旧版前端（仅本地保留，不提交远程）
+vue2/
+
+# AI Agent 配置（本地开发使用，无需提交）
+AGENTS.md
+.aider*
+docs/TEST-REPORT-20260715.md
+docs/AI-IMPLEMENTATION-PLAN.md
+docs/AI-INFRASTRUCTURE.md
+.mimocode/
+.workbuddy/
+.claude/
+
+### Node / 前端 ###
+node_modules/
+dist/
+dist-ssr/
+*.local
+.eslintcache
+.npm/
+.pnpm-store/
+
+### Python / AI 服务 ###
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+### 日志与临时产物 ###
+*.log
+logs
+/erp-backend/mvn1.txt
+/erp-backend/mvn_all.txt
+/erp-backend/tmp_tests/
+/tools/
+
+### 本地密钥与配置（禁止入库） ###
+# ai-service/config.local.json 含模型与智能体密钥，仅保留 config.example.json 作为模板
+/ai-service/config.local.json
+.env.local
+.env.*.local
+
+
+
