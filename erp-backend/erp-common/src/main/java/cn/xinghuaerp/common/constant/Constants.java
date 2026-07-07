@@ -53,4 +53,14 @@ public class Constants
      * 令牌
      */
     public static final String TOKEN = "token";
+
+    /**
+     * 分页默认页码：页码从 1 开始
+     */
+    public static final int DEFAULT_PAGE_NUM = 1;
+
+    /**
+     * 分页默认每页条数
+     */
+    public static final int DEFAULT_PAGE_SIZE = 10;
 }
