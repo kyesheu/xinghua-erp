@@ -17,6 +17,7 @@
   <url>http://maven.apache.org</url>
   <modules>
     <module>erp-common</module>
+    <module>erp-system</module>
   </modules>
 
 
