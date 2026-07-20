@@ -26,7 +26,11 @@ public class SysTaskLogsServiceImpl extends ServiceImpl<SysTaskLogsMapper, SysTa
 
     @Override
     public PageResult<SysTaskLogs> queryPageList(Integer taskId, PageQuery pageQuery) {
-        LambdaQueryWrapper<SysTaskLogs> queryWrapper = new LambdaQueryWrapper<SysTaskLogs>().eq(SysTaskLogs::getTaskId,taskId);
+        LambdaQueryWrapper<SysTaskLogs> queryWrapper = new LambdaQueryWrapper<SysTaskLogs>()
+                // 未指定任务时返回全部日志，避免拼出 task_id = null 的恒假条件
+                .eq(taskId != null, SysTaskLogs::getTaskId, taskId)
+                // 分页必须有确定排序，否则翻页时同一条日志可能重复出现或漏出
+                .orderByDesc(SysTaskLogs::getId);
         Page<SysTaskLogs> pages = mapper.selectPage(pageQuery.build(), queryWrapper);
         return PageResult.build(pages);
     }
