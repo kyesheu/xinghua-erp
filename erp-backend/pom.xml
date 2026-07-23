@@ -18,6 +18,7 @@
   <modules>
     <module>erp-common</module>
     <module>erp-system</module>
+    <module>erp-product</module>
   </modules>
 
 

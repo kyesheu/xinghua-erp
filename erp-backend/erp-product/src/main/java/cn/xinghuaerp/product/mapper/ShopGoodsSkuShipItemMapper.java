@@ -1,0 +1,18 @@
+package cn.xinghuaerp.product.mapper;
+
+import cn.xinghuaerp.product.entity.ShopGoodsSkuShipItem;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+
+/**
+* @author 1
+* @description 针对表【oms_shop_goods_sku_ship_item(店铺虚拟商品发货实物商品表)】的数据库操作Mapper
+* @createDate 2025-08-06 18:39:13
+* @Entity cn.xinghuaerp.product.entity.ShopGoodsSkuShipItem
+*/
+public interface ShopGoodsSkuShipItemMapper extends BaseMapper<ShopGoodsSkuShipItem> {
+
+}
+
+
+
+
