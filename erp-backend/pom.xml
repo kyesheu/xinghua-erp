@@ -19,6 +19,7 @@
     <module>erp-common</module>
     <module>erp-system</module>
     <module>erp-product</module>
+    <module>erp-inventory</module>
   </modules>
 
 
