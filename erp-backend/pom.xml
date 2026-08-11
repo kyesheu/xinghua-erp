@@ -21,6 +21,7 @@
     <module>erp-product</module>
     <module>erp-inventory</module>
     <module>erp-purchase</module>
+    <module>erp-order</module>
   </modules>
 
 
