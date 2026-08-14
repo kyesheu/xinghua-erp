@@ -51,7 +51,9 @@ public class OGoodsInventoryBatchServiceImpl
         if (warehouseId != null) {
             wrapper.eq(OGoodsInventoryBatch::getWarehouseId, warehouseId);
         }
-        wrapper.orderByAsc(OGoodsInventoryBatch::getCreateTime);
+        // 库存流水按时间倒序展示；id 兜底，保证同秒写入的记录顺序稳定
+        wrapper.orderByDesc(OGoodsInventoryBatch::getCreateTime)
+                .orderByDesc(OGoodsInventoryBatch::getId);
         return this.list(wrapper);
     }
 }
