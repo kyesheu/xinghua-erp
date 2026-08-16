@@ -1,0 +1,18 @@
+package cn.xinghuaerp.order.mapper;
+
+import cn.xinghuaerp.order.entity.ShopOrderItem;
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+
+/**
+* @author qilip
+* @description 针对表【oms_shop_order_item】的数据库操作Mapper
+* @createDate 2025-07-15 11:36:42
+* @Entity cn.xinghuaerp.order.entity.ShopOrderItem
+*/
+public interface ShopOrderItemMapper extends BaseMapper<ShopOrderItem> {
+
+}
+
+
+
+
