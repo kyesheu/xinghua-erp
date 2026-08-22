@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.xinghuaerp.report.mapper.DashboardMapper">
+    <!-- 所有期间统计采用同一批已付款原订单；退款按原单日期归属，避免一对多联表放大销售额。 -->
+    <sql id="orders">
+        o.order_time &gt;= #{start} AND o.order_time &lt; #{end}
+        AND o.payment &gt; 0 AND o.order_status IN (1,2,3,11,12,13,22,31,101)
+        <if test="merchantId != null">AND o.merchant_id=#{merchantId}</if>
+        <if test="shopId != null">AND o.shop_id=#{shopId}</if>
+    </sql>
+    <select id="daily" resultType="map">
+        SELECT CAST(o.order_time AS DATE) AS report_day, COUNT(*) AS orders,
+               CAST(SUM(o.payment) AS DECIMAL(18,2)) amount
+        FROM o_order o WHERE <include refid="orders"/>
+        GROUP BY CAST(o.order_time AS DATE) ORDER BY report_day
+    </select>
+    <select id="refunds" resultType="map">
+        SELECT CAST(o.order_time AS DATE) AS report_day, CAST(SUM(r.refund_fee) AS DECIMAL(18,2)) AS amount
+        FROM o_refund r JOIN o_order o ON o.order_num=r.order_num AND o.shop_id=r.shop_id AND o.merchant_id=r.merchant_id
+        WHERE <include refid="orders"/> AND r.status=4 AND r.refund_type IN (1,10,11)
+          AND r.create_time &lt; #{end}
+        GROUP BY CAST(o.order_time AS DATE)
+    </select>
+    <select id="shops" resultType="map">
+        SELECT o.shop_id id, COALESCE(s.name,'未命名店铺') name,
+               CAST(SUM(o.payment) AS DECIMAL(18,2)) amount, COUNT(*) quantity
+        FROM o_order o LEFT JOIN o_shop s ON s.id=o.shop_id
+        WHERE <include refid="orders"/>
+        GROUP BY o.shop_id,s.name ORDER BY amount DESC,o.shop_id LIMIT 6
+    </select>
+    <select id="products" resultType="map">
+        SELECT i.goods_id id, COALESCE(g.name,MAX(i.goods_title),'未命名商品') name,
+               COALESCE(g.image,MAX(i.goods_img),'') image,
+               CAST(SUM(COALESCE(i.payment,i.item_amount,0)) AS DECIMAL(18,2)) amount,
+               SUM(i.quantity) quantity
+        FROM o_order_item i JOIN o_order o ON o.id=i.order_id LEFT JOIN o_goods g ON g.id=i.goods_id
+        WHERE <include refid="orders"/>
+        GROUP BY i.goods_id,g.name,g.image ORDER BY amount DESC,i.goods_id LIMIT 5
+    </select>
+    <select id="statuses" resultType="map">
+        SELECT o.order_status code,COUNT(*) value FROM o_order o
+        WHERE <include refid="orders"/> GROUP BY o.order_status ORDER BY o.order_status
+    </select>
+    <select id="afterSales" resultType="map">
+        SELECT r.refund_type code,COUNT(*) value
+        FROM o_refund r JOIN o_order o ON o.order_num=r.order_num AND o.shop_id=r.shop_id AND o.merchant_id=r.merchant_id
+        WHERE <include refid="orders"/> AND r.status &lt;&gt; 1 AND r.create_time &lt; #{end}
+        GROUP BY r.refund_type ORDER BY r.refund_type
+    </select>
+    <select id="warehouses" resultType="map">
+        SELECT w.id,w.warehouse_name name,COALESCE(SUM(v.quantity),0) quantity,
+               COALESCE(SUM(v.available_quantity),0) available,COALESCE(SUM(v.locked_quantity),0) locked,
+               SUM(CASE WHEN v.id IS NOT NULL AND COALESCE(v.available_quantity,0)&lt;=COALESCE(s.low_qty,0) THEN 1 ELSE 0 END) lowStockCount
+        FROM erp_warehouse w LEFT JOIN o_goods_inventory v ON v.warehouse_id=w.id AND COALESCE(v.is_delete,0)=0
+        <if test="merchantId != null">AND v.merchant_id=#{merchantId}</if>
+        <if test="shopId != null">AND v.shop_id=#{shopId}</if>
+        LEFT JOIN o_goods_sku s ON s.id=v.sku_id
+        WHERE 1=1
+        <if test="merchantId != null">AND w.merchant_id=#{merchantId}</if>
+        <if test="shopId != null">AND EXISTS (SELECT 1 FROM o_goods_inventory x WHERE x.warehouse_id=w.id AND x.shop_id=#{shopId} AND COALESCE(x.is_delete,0)=0)</if>
+        GROUP BY w.id,w.warehouse_name ORDER BY quantity DESC,w.id
+    </select>
+    <select id="tasks" resultType="map">
+        SELECT
+        (SELECT COUNT(*) FROM o_order WHERE order_status=1
+         <if test="merchantId != null">AND merchant_id=#{merchantId}</if><if test="shopId != null">AND shop_id=#{shopId}</if>) waitShip,
+        (SELECT COUNT(*) FROM erp_stock_in WHERE status IN (0,1)
+         <if test="merchantId != null">AND merchant_id=#{merchantId}</if><if test="shopId != null">AND shop_id=#{shopId}</if>) waitInbound,
+        (SELECT COUNT(*) FROM erp_stock_out WHERE status IN (0,1)
+         <if test="merchantId != null">AND merchant_id=#{merchantId}</if><if test="shopId != null">AND shop_id=#{shopId}</if>) waitOutbound,
+        (SELECT COUNT(*) FROM o_refund WHERE status NOT IN (1,4)
+         <if test="merchantId != null">AND merchant_id=#{merchantId}</if><if test="shopId != null">AND shop_id=#{shopId}</if>) waitAfterSale
+    </select>
+</mapper>

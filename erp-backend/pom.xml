@@ -23,6 +23,7 @@
     <module>erp-purchase</module>
     <module>erp-order</module>
     <module>erp-fulfillment</module>
+    <module>erp-finance</module>
   </modules>
 
 
