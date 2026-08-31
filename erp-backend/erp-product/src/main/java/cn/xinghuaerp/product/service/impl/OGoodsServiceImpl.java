@@ -5,6 +5,7 @@ import cn.xinghuaerp.product.entity.ErpSupplierProductItem;
 
 import cn.xinghuaerp.product.bo.GoodsSkuAddBo;
 import cn.xinghuaerp.product.bo.GoodsSkuNewAddBo;
+import cn.xinghuaerp.product.constant.GoodsStatusConstants;
 import cn.xinghuaerp.product.query.GoodsQuery;
 import cn.xinghuaerp.product.query.GoodsSkuQuery;
 import cn.xinghuaerp.product.vo.GoodsSpecListVo;
@@ -77,7 +78,7 @@ public class OGoodsServiceImpl extends ServiceImpl<OGoodsMapper, OGoods>
             var prices = supplierProductItemMapper.selectList(
                     new LambdaQueryWrapper<ErpSupplierProductItem>()
                             .eq(ErpSupplierProductItem::getSupplierId, bo.getSupplierId())
-                            .ne(ErpSupplierProductItem::getStatus, 2)
+                            .ne(ErpSupplierProductItem::getStatus, GoodsStatusConstants.OFF_SALE)
                             .apply("EXISTS (SELECT 1 FROM erp_supplier_product p WHERE p.id = erp_supplier_product_item.supplier_product_id "
                                     + "AND p.supplier_id = erp_supplier_product_item.supplier_id AND p.status <> 2)")
                             .in(ErpSupplierProductItem::getErpGoodsSkuId, skuIds)
@@ -251,7 +252,7 @@ public class OGoodsServiceImpl extends ServiceImpl<OGoodsMapper, OGoods>
         goods.setUnitName(bo.getUnitName());
         goods.setCategoryId(bo.getCategoryId());
         goods.setBarCode(bo.getBarCode());
-        goods.setStatus(1);
+        goods.setStatus(GoodsStatusConstants.ON_SALE);
         goods.setLength(0.0);
         goods.setHeight(0.0);
         goods.setWidth(0.0);
@@ -362,7 +363,7 @@ public class OGoodsServiceImpl extends ServiceImpl<OGoodsMapper, OGoods>
                 spec.setRetailPrice(goods.getRetailPrice());
             }else spec.setRetailPrice(skuBo.getRetailPrice());
 
-            spec.setStatus(1);
+            spec.setStatus(GoodsStatusConstants.ON_SALE);
             spec.setShipType(bo.getShipType()==null?10:bo.getShipType());
             spec.setVolume(skuBo.getVolume());
             spec.setWeight(skuBo.getWeight());
@@ -486,7 +487,7 @@ public class OGoodsServiceImpl extends ServiceImpl<OGoodsMapper, OGoods>
             if(skuBo.getRetailPrice() != null){
                 spec.setRetailPrice(skuBo.getRetailPrice());
             }else spec.setRetailPrice(goods.getRetailPrice());
-            spec.setStatus(1);
+            spec.setStatus(GoodsStatusConstants.ON_SALE);
             spec.setInventoryMode(goods.getInventoryMode());
             spec.setShipType(goods.getShipType());
             spec.setWeight1(skuBo.getWeight1()==null?0.0:skuBo.getWeight1());
