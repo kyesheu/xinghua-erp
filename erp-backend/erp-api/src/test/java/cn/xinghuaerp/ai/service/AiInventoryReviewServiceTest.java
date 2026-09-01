@@ -1,0 +1,38 @@
+package cn.xinghuaerp.ai.service;
+
+import org.h2.jdbcx.JdbcDataSource;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.UUID;
+import static org.junit.jupiter.api.Assertions.*;
+
+class AiInventoryReviewServiceTest {
+    @Test void persistsSnapshotAndAcceptsOnlyOneVersionedDecision() {
+        var ds = new JdbcDataSource(); ds.setURL("jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1");
+        var db = new JdbcTemplate(ds);
+        db.execute("CREATE TABLE ai_inventory_review_task(id VARCHAR(36) PRIMARY KEY,created_by BIGINT,request_key VARCHAR(36),sku_id BIGINT,warehouse_id BIGINT,request_json CLOB,facts_json CLOB,result_json CLOB,suggested_quantity INT,approved_quantity INT,status VARCHAR(16),version INT,created_at TIMESTAMP,reviewed_by BIGINT,reviewed_at TIMESTAMP,review_note VARCHAR(500), UNIQUE(created_by,request_key))");
+        var service = new AiInventoryReviewService(db);
+        var id = service.create(7,"key",5,1,"{\"days\":7}","{\"stock\":8}","{\"suggestedQuantity\":5}",5);
+        var task = service.get(id);
+        assertEquals(id,service.create(7,"key",5,1,"{\"days\":7}","{}","{}",5));
+        assertThrows(IllegalStateException.class,()->service.create(7,"key",5,1,"{}","{}","{}",5));
+        assertEquals("PENDING",task.status()); assertEquals(1,task.version());
+        assertEquals("{\"stock\":8}",task.factsJson());
+        service.decide(id,1,true,9,"核对通过",7);
+        var decided = service.get(id);
+        assertEquals(7,decided.approvedQuantity()); assertEquals(5,decided.suggestedQuantity());
+        assertEquals("APPROVED",decided.status()); assertEquals(2,decided.version()); assertEquals(9,decided.reviewedBy());
+        assertThrows(IllegalStateException.class,()->service.decide(id,1,false,10,"过期",null));
+        assertEquals("APPROVED",service.recent().get(0).status());
+        var second = service.create(7,"second",5,1,"{}","{}","{}",5);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var a = pool.submit(() -> { start.await(); try { service.decide(second,1,true,9,"",5); return true; } catch (IllegalStateException e) { return false; } });
+            var b = pool.submit(() -> { start.await(); try { service.decide(second,1,false,10,"",null); return true; } catch (IllegalStateException e) { return false; } });
+            start.countDown();
+            assertNotEquals(a.get(5,java.util.concurrent.TimeUnit.SECONDS),b.get(5,java.util.concurrent.TimeUnit.SECONDS));
+        } catch (Exception e) { throw new AssertionError(e); } finally { pool.shutdownNow(); }
+        db.execute("SHUTDOWN");
+    }
+}

@@ -25,6 +25,7 @@
     <module>erp-fulfillment</module>
     <module>erp-finance</module>
     <module>erp-channel</module>
+    <module>erp-api</module>
   </modules>
 
 

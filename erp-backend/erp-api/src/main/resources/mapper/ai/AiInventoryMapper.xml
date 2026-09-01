@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="cn.xinghuaerp.ai.mapper.AiInventoryMapper">
+    <sql id="overviewScope">
+        <if test="warehouseId != null">
+            AND EXISTS (SELECT 1 FROM o_goods_inventory v WHERE v.sku_id=s.id AND COALESCE(v.is_delete,0)=0 AND v.warehouse_id=#{warehouseId})
+        </if>
+        <if test="merchantId != null">
+            AND (s.merchant_id=#{merchantId} OR EXISTS (SELECT 1 FROM o_goods_inventory v WHERE v.sku_id=s.id AND COALESCE(v.is_delete,0)=0 AND v.merchant_id=#{merchantId}
+              <if test="shopId != null">AND v.shop_id=#{shopId}</if>))
+        </if>
+        <if test="shopId != null">
+            AND ((s.merchant_id=#{merchantId} AND s.shop_id=#{shopId}) OR EXISTS (SELECT 1 FROM o_goods_inventory v WHERE v.sku_id=s.id AND COALESCE(v.is_delete,0)=0 AND v.merchant_id=#{merchantId} AND v.shop_id=#{shopId}))
+        </if>
+    </sql>
+    <select id="countOverview" resultType="long">
+        SELECT COUNT(*) FROM o_goods_sku s WHERE s.id &gt; 0 <include refid="overviewScope"/>
+    </select>
+    <select id="batchAudit" resultType="cn.xinghuaerp.ai.vo.AiInventoryBatchAudit">
+        SELECT i.id AS inventoryId, COUNT(b.id) AS batchCount, COALESCE(SUM(b.current_qty),0) AS batchQuantity,
+               COALESCE(SUM(CASE WHEN b.id IS NOT NULL AND
+                   (b.current_qty IS NULL OR b.current_qty &lt; 0 OR b.sku_id IS NULL OR b.sku_id != i.sku_id
+                    OR b.warehouse_id IS NULL OR b.warehouse_id != i.warehouse_id
+                    OR b.merchant_id IS NULL OR b.merchant_id != i.merchant_id
+                    OR b.shop_id IS NULL OR b.shop_id != i.shop_id
+                    OR b.stock_status IS NULL OR b.stock_status != i.stock_status)
+                   THEN 1 ELSE 0 END),0) AS invalidBatches
+        FROM o_goods_inventory i LEFT JOIN o_goods_inventory_batch b ON b.inventory_id=i.id
+        WHERE i.id IN <foreach collection="inventoryIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        GROUP BY i.id ORDER BY i.id
+    </select>
+    <sql id="emptyInventoryScope">
+        EXISTS (SELECT 1 FROM o_goods_inventory z
+          WHERE z.sku_id=s.id AND COALESCE(z.is_delete,0)=0 AND z.stock_status=1
+          <if test="merchantId != null">AND z.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND z.shop_id=#{shopId}</if>
+          <if test="warehouseId != null">AND z.warehouse_id=#{warehouseId}</if>
+          GROUP BY z.warehouse_id,z.merchant_id,z.shop_id
+          HAVING SUM(z.available_quantity)&lt;=0)
+    </sql>
+    <sql id="batchIssueScope">
+        EXISTS (SELECT 1 FROM o_goods_inventory q LEFT JOIN o_goods_inventory_batch b ON b.inventory_id=q.id
+          WHERE q.sku_id=s.id AND COALESCE(q.is_delete,0)=0 AND q.stock_status=1
+          <if test="merchantId != null">AND q.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND q.shop_id=#{shopId}</if>
+          <if test="warehouseId != null">AND q.warehouse_id=#{warehouseId}</if>
+          GROUP BY q.id,q.quantity,q.sku_id,q.warehouse_id,q.merchant_id,q.shop_id,q.stock_status
+          HAVING COUNT(b.id)=0 OR COALESCE(SUM(b.current_qty),0) &lt;&gt; q.quantity
+             OR SUM(CASE WHEN b.id IS NOT NULL AND (b.current_qty IS NULL OR b.current_qty &lt; 0
+                 OR b.sku_id IS NULL OR b.sku_id &lt;&gt; q.sku_id OR b.warehouse_id IS NULL OR b.warehouse_id &lt;&gt; q.warehouse_id
+                 OR b.merchant_id IS NULL OR b.merchant_id &lt;&gt; q.merchant_id OR b.shop_id IS NULL OR b.shop_id &lt;&gt; q.shop_id
+                 OR b.stock_status IS NULL OR b.stock_status &lt;&gt; q.stock_status) THEN 1 ELSE 0 END)&gt;0)
+    </sql>
+    <sql id="overviewRows">
+        SELECT s.id AS skuId, s.sku_code AS skuCode, s.goods_name AS goodsName, s.sku_name AS skuName,
+               s.status AS productStatus, s.low_qty AS lowQty,
+               COUNT(i.id) AS inventoryRows,
+               SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END) AS goodRows,
+               COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN CONCAT(i.warehouse_id, ':', i.merchant_id, ':', i.shop_id) END) AS distinctGoodScopes,
+               COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN i.warehouse_id END) AS distinctWarehouses,
+               SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END) AS availableQuantity,
+               SUM(CASE WHEN i.stock_status=1 THEN i.quantity ELSE 0 END) AS quantity,
+               SUM(CASE WHEN i.stock_status=1 THEN i.locked_quantity ELSE 0 END) AS lockedQuantity,
+               SUM(CASE WHEN i.stock_status=1 AND (i.available_quantity IS NULL OR i.quantity IS NULL OR i.locked_quantity IS NULL
+                     OR i.available_quantity &lt; 0 OR i.quantity &lt; 0 OR i.locked_quantity &lt; 0
+                     OR i.available_quantity &lt;&gt; i.quantity - i.locked_quantity) THEN 1 ELSE 0 END) AS invalidRows,
+               CASE WHEN <include refid="emptyInventoryScope"/> THEN TRUE ELSE FALSE END AS emptyInventoryScope,
+               CASE WHEN <include refid="batchIssueScope"/> THEN TRUE ELSE FALSE END AS batchIssue
+        FROM o_goods_sku s LEFT JOIN o_goods_inventory i ON i.sku_id=s.id AND COALESCE(i.is_delete,0)=0
+          <if test="merchantId != null">AND i.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND i.shop_id=#{shopId}</if>
+          <if test="warehouseId != null">AND i.warehouse_id=#{warehouseId}</if>
+        WHERE s.id &gt; 0 <include refid="overviewScope"/>
+        GROUP BY s.id,s.sku_code,s.goods_name,s.sku_name,s.status,s.low_qty
+    </sql>
+    <select id="allOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+        <include refid="overviewRows"/>
+    </select>
+    <select id="overview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+        <include refid="overviewRows"/>
+        ORDER BY CASE
+          WHEN COUNT(i.id)=0 OR SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END)=0 THEN 2
+          WHEN SUM(CASE WHEN i.stock_status=1 AND (i.available_quantity IS NULL OR i.quantity IS NULL OR i.locked_quantity IS NULL OR i.available_quantity &lt; 0 OR i.quantity &lt; 0 OR i.locked_quantity &lt; 0 OR i.available_quantity &lt;&gt; i.quantity-i.locked_quantity) THEN 1 ELSE 0 END)&gt;0 THEN 0
+          WHEN SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END)&gt;COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN CONCAT(i.warehouse_id, ':', i.merchant_id, ':', i.shop_id) END) THEN 0
+          WHEN <include refid="batchIssueScope"/> THEN 0
+          WHEN SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END)&lt;=0 OR <include refid="emptyInventoryScope"/> THEN 1
+          WHEN COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN i.warehouse_id END)&gt;1 THEN 2
+          WHEN s.low_qty&gt;0 AND SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END)&lt;=s.low_qty THEN 3
+          WHEN COALESCE(s.low_qty,0)&lt;=0 THEN 4 ELSE 5 END, s.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <sql id="productFilter">
+        <if test="keyword != null and keyword != ''">AND (s.goods_name LIKE CONCAT('%',#{keyword},'%') ESCAPE '!' OR s.sku_code LIKE CONCAT('%',#{keyword},'%') ESCAPE '!' OR s.sku_name LIKE CONCAT('%',#{keyword},'%') ESCAPE '!')</if>
+    </sql>
+    <select id="countProductOverview" resultType="long">
+        SELECT COUNT(*) FROM o_goods_sku s WHERE s.id &gt; 0 <include refid="overviewScope"/> <include refid="productFilter"/>
+    </select>
+    <select id="productOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+        SELECT s.id AS skuId, s.sku_code AS skuCode, s.goods_name AS goodsName, s.sku_name AS skuName,
+               s.status AS productStatus, s.low_qty AS lowQty,
+               COUNT(i.id) AS inventoryRows,
+               SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END) AS goodRows,
+               COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN CONCAT(i.warehouse_id, ':', i.merchant_id, ':', i.shop_id) END) AS distinctGoodScopes,
+               COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN i.warehouse_id END) AS distinctWarehouses,
+               SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END) AS availableQuantity,
+               SUM(CASE WHEN i.stock_status=1 THEN i.quantity ELSE 0 END) AS quantity,
+               SUM(CASE WHEN i.stock_status=1 THEN i.locked_quantity ELSE 0 END) AS lockedQuantity,
+               SUM(CASE WHEN i.stock_status=1 AND (i.available_quantity IS NULL OR i.quantity IS NULL OR i.locked_quantity IS NULL
+                     OR i.available_quantity &lt; 0 OR i.quantity &lt; 0 OR i.locked_quantity &lt; 0
+                     OR i.available_quantity &lt;&gt; i.quantity - i.locked_quantity) THEN 1 ELSE 0 END) AS invalidRows,
+               CASE WHEN <include refid="emptyInventoryScope"/> THEN TRUE ELSE FALSE END AS emptyInventoryScope,
+               CASE WHEN <include refid="batchIssueScope"/> THEN TRUE ELSE FALSE END AS batchIssue
+        FROM o_goods_sku s LEFT JOIN o_goods_inventory i ON i.sku_id=s.id AND COALESCE(i.is_delete,0)=0
+          <if test="merchantId != null">AND i.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND i.shop_id=#{shopId}</if>
+          <if test="warehouseId != null">AND i.warehouse_id=#{warehouseId}</if>
+        WHERE s.id &gt; 0 <include refid="overviewScope"/> <include refid="productFilter"/>
+        GROUP BY s.id,s.sku_code,s.goods_name,s.sku_name,s.status,s.low_qty
+        ORDER BY CASE
+          WHEN COUNT(i.id)=0 OR SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END)=0 THEN 2
+          WHEN SUM(CASE WHEN i.stock_status=1 AND (i.available_quantity IS NULL OR i.quantity IS NULL OR i.locked_quantity IS NULL OR i.available_quantity &lt; 0 OR i.quantity &lt; 0 OR i.locked_quantity &lt; 0 OR i.available_quantity &lt;&gt; i.quantity-i.locked_quantity) THEN 1 ELSE 0 END)&gt;0 THEN 0
+          WHEN SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END)&gt;COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN CONCAT(i.warehouse_id, ':', i.merchant_id, ':', i.shop_id) END) THEN 0
+          WHEN <include refid="batchIssueScope"/> THEN 0
+          WHEN SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END)&lt;=0 OR <include refid="emptyInventoryScope"/> THEN 1
+          WHEN COUNT(DISTINCT CASE WHEN i.stock_status=1 THEN i.warehouse_id END)&gt;1 THEN 2
+          WHEN s.low_qty&gt;0 AND SUM(CASE WHEN i.stock_status=1 THEN i.available_quantity ELSE 0 END)&lt;=s.low_qty THEN 3
+          WHEN COALESCE(s.low_qty,0)&lt;=0 THEN 4 ELSE 5 END, s.id
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+    <select id="find" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
+        SELECT id, goods_id, goods_num, sku_id, sku_code, goods_name, sku_name,
+               quantity, locked_quantity, available_quantity, warehouse_id, merchant_id,
+               shop_id, stock_status, update_time
+        FROM o_goods_inventory
+        WHERE sku_id = #{skuId} AND COALESCE(is_delete, 0) = 0
+        <if test="warehouseId != null">AND warehouse_id = #{warehouseId}</if>
+        <if test="merchantId != null">AND merchant_id = #{merchantId}</if>
+        <if test="shopId != null">AND shop_id = #{shopId}</if>
+        ORDER BY warehouse_id, merchant_id, shop_id, id
+        LIMIT 200
+    </select>
+    <select id="emptyScopes" resultType="cn.xinghuaerp.ai.vo.AiInventoryEmptyScope">
+        SELECT sku_id AS skuId, warehouse_id AS warehouseId, merchant_id AS merchantId,
+               shop_id AS shopId, SUM(available_quantity) AS availableQuantity
+        FROM o_goods_inventory
+        WHERE COALESCE(is_delete,0)=0 AND stock_status=1 AND sku_id IN
+        <foreach collection="skuIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        <if test="merchantId != null">AND merchant_id=#{merchantId}</if>
+        <if test="shopId != null">AND shop_id=#{shopId}</if>
+        <if test="warehouseId != null">AND warehouse_id=#{warehouseId}</if>
+        GROUP BY sku_id,warehouse_id,merchant_id,shop_id
+        HAVING SUM(available_quantity)&lt;=0
+        ORDER BY sku_id,warehouse_id,merchant_id,shop_id LIMIT 1001
+    </select>
+    <select id="overviewPurchases" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+        SELECT i.spec_id AS skuId, COUNT(DISTINCT p.id) AS openPurchaseOrders
+        FROM erp_purchase_order p JOIN erp_purchase_order_item i ON i.order_id=p.id
+        WHERE i.spec_id IN
+        <foreach collection="skuIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+          AND COALESCE(i.is_delete,0)=0 AND i.quantity&gt;0
+          AND i.merchant_id=p.merchant_id AND i.shop_id=p.shop_id
+          AND p.status IN (1,2,101,102)
+          <if test="merchantId != null">AND p.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND p.shop_id=#{shopId}</if>
+        GROUP BY i.spec_id
+    </select>
+    <select id="overviewSales" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+        SELECT i.goods_sku_id AS skuId, SUM(i.quantity) AS sales30Days
+        FROM o_order_item i JOIN o_order o ON o.id = i.order_id
+        WHERE i.goods_sku_id IN
+        <foreach collection="skuIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+          AND o.order_time &gt;= #{start} AND o.order_time &lt; #{end}
+          AND o.payment &gt; 0 AND o.order_status IN (1, 2, 3, 101)
+          <if test="merchantId != null">AND o.merchant_id = #{merchantId}</if>
+          <if test="shopId != null">AND o.shop_id = #{shopId}</if>
+        GROUP BY i.goods_sku_id
+    </select>
+    <select id="salesQuantity" resultType="long">
+        SELECT COALESCE(SUM(i.quantity), 0)
+        FROM o_order_item i JOIN o_order o ON o.id = i.order_id
+        WHERE i.goods_sku_id = #{skuId}
+          AND o.order_time &gt;= #{start} AND o.order_time &lt; #{end}
+          AND o.payment &gt; 0 AND o.order_status IN (1, 2, 3, 101)
+          <if test="merchantId != null">AND o.merchant_id = #{merchantId}</if>
+          <if test="shopId != null">AND o.shop_id = #{shopId}</if>
+    </select>
+    <select id="purchaseInbound" resultType="map">
+        SELECT i.id AS itemId, i.stock_in_id AS stockInId, i.source_no AS sourceNo,
+               i.source_item_id AS sourceItemId, i.sku_id AS skuId, i.warehouse_id AS warehouseId,
+               i.merchant_id AS merchantId, i.shop_id AS shopId, i.quantity AS quantity,
+               i.in_quantity AS inQuantity, (i.quantity - i.in_quantity) AS remainingQuantity,
+               i.status AS itemStatus, i.update_time AS updateTime
+        FROM erp_stock_in_item i JOIN erp_stock_in h ON h.id = i.stock_in_id
+        WHERE i.sku_id = #{skuId} AND i.stock_in_type = 1 AND h.stock_in_type = 1
+          AND i.merchant_id = h.merchant_id AND i.shop_id = h.shop_id
+          AND i.quantity &gt; i.in_quantity
+          <if test="warehouseId != null">AND i.warehouse_id = #{warehouseId}</if>
+          <if test="merchantId != null">AND h.merchant_id = #{merchantId}</if>
+          <if test="shopId != null">AND h.shop_id = #{shopId}</if>
+        ORDER BY i.id DESC LIMIT 200
+    </select>
+    <select id="purchaseWithoutTask" resultType="map">
+        SELECT p.id AS orderId, p.order_num AS orderNum, p.status AS orderStatus,
+               i.id AS itemId, i.quantity AS quantity, p.warehouse_id AS warehouseId
+        FROM erp_purchase_order p JOIN erp_purchase_order_item i ON i.order_id = p.id
+        WHERE i.spec_id = #{skuId} AND COALESCE(i.is_delete,0)=0
+          AND i.merchant_id=p.merchant_id AND i.shop_id=p.shop_id
+          AND p.status IN (1,2,3,101,102) AND i.quantity &gt; 0
+          AND NOT EXISTS (SELECT 1 FROM erp_stock_in h JOIN erp_stock_in_item s ON s.stock_in_id=h.id
+                          WHERE h.stock_in_type=1 AND h.source_id=p.id AND s.stock_in_type=1
+                            AND s.source_item_id=i.id AND s.sku_id=i.spec_id
+                            AND h.merchant_id=p.merchant_id AND h.shop_id=p.shop_id
+                            AND s.merchant_id=p.merchant_id AND s.shop_id=p.shop_id)
+          <if test="merchantId != null">AND p.merchant_id = #{merchantId}</if>
+          <if test="shopId != null">AND p.shop_id = #{shopId}</if>
+        ORDER BY p.id DESC, i.id DESC LIMIT 200
+    </select>
+    <select id="purchaseShipments" resultType="cn.xinghuaerp.ai.vo.AiPurchaseShipment">
+        SELECT s.id,s.order_id,p.order_num,s.warehouse_id,s.ship_company,s.ship_num,s.ship_time,s.receipt_time,s.status
+        FROM erp_purchase_order_ship s JOIN erp_purchase_order p ON p.id=s.order_id
+          AND p.merchant_id=s.merchant_id AND p.shop_id=s.shop_id AND p.supplier_id=s.supplier_id
+        WHERE p.status IN (1,2,3,101,102)
+          AND EXISTS (SELECT 1 FROM erp_purchase_order_item i WHERE i.order_id=p.id
+            AND i.spec_id=#{skuId} AND COALESCE(i.is_delete,0)=0
+            AND i.merchant_id=p.merchant_id AND i.shop_id=p.shop_id)
+          <if test="warehouseId != null">AND s.warehouse_id=#{warehouseId}</if>
+          <if test="merchantId != null">AND p.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND p.shop_id=#{shopId}</if>
+        ORDER BY s.id DESC LIMIT 200
+    </select>
+    <select id="purchaseLedger" resultType="cn.xinghuaerp.ai.vo.AiPurchaseLedgerRow">
+        SELECT p.id AS order_id,p.order_num,p.status AS order_status,p.warehouse_id,p.merchant_id,p.shop_id,
+               i.id AS item_id,i.quantity AS ordered_quantity,
+               COUNT(s.id) AS task_count,COALESCE(SUM(s.quantity),0) AS task_quantity,
+               COALESCE(SUM(s.in_quantity),0) AS received_quantity,
+               SUM(CASE WHEN s.id IS NOT NULL AND (s.quantity IS NULL OR s.in_quantity IS NULL
+                   OR s.quantity &lt;= 0 OR s.in_quantity &lt; 0 OR s.in_quantity &gt; s.quantity
+                   OR s.status IS NULL OR s.status NOT IN (0,1,2)
+                   OR (s.status=2 AND s.quantity != s.in_quantity)
+                   OR (s.status IN (0,1) AND s.quantity=s.in_quantity)
+                   OR (s.status=0 AND s.in_quantity != 0)
+                   OR (s.status=1 AND s.in_quantity &lt;= 0)
+                   OR s.warehouse_id IS NULL OR p.warehouse_id IS NULL OR s.warehouse_id != p.warehouse_id)
+                   THEN 1 ELSE 0 END) AS invalid_tasks,
+               (SELECT COUNT(*) FROM erp_stock_in e WHERE e.stock_in_type=1 AND e.source_id=p.id) AS entry_count
+        FROM erp_purchase_order p JOIN erp_purchase_order_item i ON i.order_id=p.id
+        LEFT JOIN erp_stock_in h ON h.stock_in_type=1 AND h.source_id=p.id
+             AND h.merchant_id=p.merchant_id AND h.shop_id=p.shop_id
+        LEFT JOIN erp_stock_in_item s ON s.stock_in_id=h.id AND s.stock_in_type=1
+             AND s.source_item_id=i.id AND s.sku_id=i.spec_id
+             AND s.merchant_id=p.merchant_id AND s.shop_id=p.shop_id
+        WHERE i.spec_id=#{skuId} AND COALESCE(i.is_delete,0)=0
+          AND i.merchant_id=p.merchant_id AND i.shop_id=p.shop_id
+          AND p.status IN (1,2,3,101,102)
+          <if test="merchantId != null">AND p.merchant_id=#{merchantId}</if>
+          <if test="shopId != null">AND p.shop_id=#{shopId}</if>
+        GROUP BY p.id,p.order_num,p.status,p.warehouse_id,p.merchant_id,p.shop_id,i.id,i.quantity
+        ORDER BY p.id DESC,i.id DESC LIMIT 200
+    </select>
+    <select id="search" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
+        SELECT DISTINCT sku_id, sku_code, goods_name, sku_name
+        FROM o_goods_inventory
+        WHERE COALESCE(is_delete, 0) = 0 AND sku_id &gt; 0
+          AND (LOCATE(#{keyword}, COALESCE(sku_code, '')) &gt; 0
+            OR LOCATE(#{keyword}, COALESCE(goods_name, '')) &gt; 0)
+        <if test="merchantId != null">AND merchant_id = #{merchantId}</if>
+        <if test="shopId != null">AND shop_id = #{shopId}</if>
+        ORDER BY sku_id, sku_code, goods_name, sku_name LIMIT 30
+    </select>
+</mapper>
