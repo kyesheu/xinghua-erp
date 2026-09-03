@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS ai_inventory_review_task (
+    id VARCHAR(36) NOT NULL PRIMARY KEY,
+    created_by BIGINT NOT NULL,
+    request_key VARCHAR(36) NOT NULL,
+    sku_id BIGINT NOT NULL,
+    warehouse_id BIGINT NOT NULL,
+    request_json TEXT NOT NULL,
+    facts_json MEDIUMTEXT NOT NULL,
+    result_json MEDIUMTEXT NOT NULL,
+    suggested_quantity INT NOT NULL,
+    approved_quantity INT NULL,
+    status VARCHAR(16) NOT NULL,
+    version INT NOT NULL,
+    workflow_synced_version INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    reviewed_by BIGINT NULL,
+    reviewed_at DATETIME NULL,
+    review_note VARCHAR(500) NULL,
+    INDEX idx_inventory_review_created (created_at, id),
+    UNIQUE KEY uk_inventory_review_request (created_by, request_key),
+    INDEX idx_inventory_review_status (status, created_at)
+);

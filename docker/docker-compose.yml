@@ -1,0 +1,202 @@
+name: xinghua-erp
+
+# 本地开发：在本目录执行 docker compose up -d
+# 查看状态：docker compose ps
+# 停止环境（保留数据）：docker compose down
+# MySQL 首次启动会导入项目 SQL，仅在数据卷为空时执行，请等待健康检查通过。
+# 与 erp-backend/erp-api/src/main/resources/application.yml 一致，前后端可直接在 IDEA 启动。
+# 配置映射：./mysql/conf.d → 容器 /etc/mysql/conf.d（放 my.cnf 即生效，重启容器读取）；
+#           ./nginx/nginx.conf → nginx 容器 /etc/nginx/nginx.conf（见下方注释服务）。
+services:
+  mysql:
+    image: mysql:8.0.36
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      # 密码不入库：本地开发通过环境变量注入，例如 export MYSQL_ROOT_PASSWORD=xinghua-erp-dev-only
+      # 数据库 root 密码不入库：本地开发通过环境变量注入，例如
+      #   export MYSQL_ROOT_PASSWORD=xinghua-erp-dev-only
+      # 并保证与后端启动时的 DB_PASSWORD 取值一致。
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-xinghua-erp-dev-only}
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_DATABASE: xinghua-erp
+    ports:
+      - "127.0.0.1:13370:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 自定义 MySQL 配置：把 my.cnf 放进 ./mysql/conf.d/ 即生效（重启容器读取）。
+      - ./mysql/conf.d:/etc/mysql/conf.d:ro
+      # 主 SQL 已含基础数据，不重复导入 docs/init-data，避免主键冲突。
+      - type: bind
+        source: ../docs/sql/xinghua-erp.sql
+        target: /docker-entrypoint-initdb.d/01-xinghua-erp.sql
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      # TCP 连接确保初始化临时实例退出、SQL 导入结束后才报告健康。
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=TCP -h 127.0.0.1 -uroot -D xinghua-erp -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:16379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 注意：MinIO 官方镜像（minio/minio、quay.io/minio）已于 2025-10 从各仓库下架，
+  # 改用社区重建镜像 coollabsio/minio（最终社区版 RELEASE.2025-10-15 的重建，内含 mc）。
+  minio:
+    image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "127.0.0.1:19000:9000"
+      - "127.0.0.1:19001:9001"
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # 该镜像不带 curl，用内置 mc 的 ready 子命令做健康检查。
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # 自动创建存储桶；本地开发按分类允许图片直读，保留旧 images/ 链接，禁止匿名写入、列举。
+  minio-init:
+    image: coollabsio/minio:RELEASE.2025-10-15T17-29-55Z
+    restart: on-failure
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-xinghua-erp}
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ACCESS_KEY" "$$MINIO_SECRET_KEY"
+        mc mb --ignore-existing "local/$$MINIO_BUCKET"
+        printf '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":["*"]},"Action":["s3:GetObject"],"Resource":["arn:aws:s3:::%s/images/*","arn:aws:s3:::%s/supplier-license/*","arn:aws:s3:::%s/avatar/*","arn:aws:s3:::%s/goods/*"]}]}' "$$MINIO_BUCKET" "$$MINIO_BUCKET" "$$MINIO_BUCKET" "$$MINIO_BUCKET" > /tmp/image-policy.json
+        mc anonymous set-json /tmp/image-policy.json "local/$$MINIO_BUCKET"
+
+  # 后端：需要容器运行时，取消 backend 整段注释。
+  # 先在项目根目录执行 mvn -pl erp-api -am clean package -DskipTests
+  # 再执行 docker compose up -d backend
+  # backend:
+  #   image: eclipse-temurin:17-jre
+  #   restart: unless-stopped
+  #   working_dir: /app
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #     SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/xinghua-erp?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true"
+  #     SPRING_DATASOURCE_USERNAME: root
+  #     SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-}
+  #     SPRING_DATA_REDIS_HOST: redis
+  #     SPRING_DATA_REDIS_PORT: "6379"
+  #     SPRING_RABBITMQ_HOST: rabbitmq
+  #     SPRING_RABBITMQ_PORT: "5672"
+  #     ERP_MQ_ENABLED: "true"
+  #     SPRING_AI_DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-unused}
+  #     MINIO_ENDPOINT: http://minio:9000
+  #     MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:19000}
+  #     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+  #     MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+  #     MINIO_BUCKET: ${MINIO_BUCKET:-xinghua-erp}
+  #   ports:
+  #     - "127.0.0.1:6149:6149"
+  #   volumes:
+  #     - type: bind
+  #       source: ../erp-backend/erp-api/target/erp-api-4.1.0.jar
+  #       target: /app/erp-api.jar
+  #       read_only: true
+  #       bind:
+  #         create_host_path: false
+  #   command: ["java", "-Duser.timezone=Asia/Shanghai", "-jar", "/app/erp-api.jar"]
+  #   depends_on:
+  #     mysql:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     minio-init:
+  #       condition: service_completed_successfully
+
+  # 前端开发服务：需要容器运行时，取消 frontend 整段注释。
+  # 执行 docker compose up -d frontend，浏览器访问 http://localhost:88
+  # 浏览器直连本机 6149，后端可由 IDEA 或上面的 backend 容器提供。
+  # frontend:
+  #   image: node:24-alpine
+  #   working_dir: /appe
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #     VITE_APP_BASE_API: http://localhost:6149
+  #     VITE_APP_SSE_URL: http://localhost:6149
+  #   ports:
+  #     - "127.0.0.1:88:88"
+  #   volumes:
+  #     - ../erp-frontend:/app
+  #     - frontend-node-modules:/app/node_modules
+  #   command: ["sh", "-c", "npm ci && npm run dev -- --host 0.0.0.0 --port 88 --strictPort"]
+
+  # 生产静态部署（可选）：先在 erp-frontend/ 执行 npm run build 产出 dist/，
+  # 再取消 nginx 整段注释并执行 docker compose up -d nginx，浏览器访问 http://localhost:80。
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #   ports:
+  #     - "127.0.0.1:80:80"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ../erp-frontend/dist:/usr/share/nginx/html:ro
+  #   depends_on:
+  #     - mysql
+
+  # 消息队列：订单转入 OMS 后的异步通知链路；应用侧 erp.mq.enabled=false 时不连接，容器可按需启动。
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:56720:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  rabbitmq-data:
+  # 与 frontend 服务一起取消注释。
+  # frontend-node-modules:
