@@ -545,7 +545,8 @@ onMounted(() => {
 <style scoped>
 .copy-icon {
   cursor: pointer;
-  margin-left: 4px;
+  margin-left: 8px;
+  vertical-align: middle;
   color: #409eff;
 }
 </style>

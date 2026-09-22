@@ -277,7 +277,8 @@ onMounted(() => {
 
 <style scoped>
 .submit-bar {
-  margin-top: 20px;
+  margin-top: 16px;
+  padding-bottom: 8px;
   text-align: center;
 }
 </style>
