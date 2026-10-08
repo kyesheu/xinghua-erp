@@ -1,5 +1,7 @@
 /*
  Navicat Premium Dump SQL
+ 索引补充：库存流水与结算单列表查询频繁，已按查询条件补复合索引，
+ 仅影响本地开发库导入后的查询性能，未改动任何字段与数据。
 
  Source Server         : dev
  Source Server Type    : MySQL
@@ -4127,7 +4129,8 @@ CREATE TABLE `fms_order_settlement`  (
   INDEX `idx_shop_id`(`shop_id` ASC) USING BTREE,
   INDEX `idx_order_id`(`order_id` ASC) USING BTREE,
   INDEX `idx_order_no`(`order_no` ASC) USING BTREE,
-  INDEX `idx_create_time`(`create_time` ASC) USING BTREE
+  INDEX `idx_create_time`(`create_time` ASC) USING BTREE,
+  INDEX `idx_merchant_time`(`merchant_id` ASC, `create_time` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '订单结算表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
@@ -4441,7 +4444,8 @@ CREATE TABLE `o_goods_inventory_batch`  (
   INDEX `idx_sku_id`(`sku_id` ASC) USING BTREE,
   INDEX `idx_warehouse_id`(`warehouse_id` ASC) USING BTREE,
   INDEX `idx_batch_num`(`batch_num` ASC) USING BTREE,
-  INDEX `idx_barcode`(`barcode` ASC) USING BTREE
+  INDEX `idx_barcode`(`barcode` ASC) USING BTREE,
+  INDEX `idx_wh_sku_time`(`warehouse_id` ASC, `sku_id` ASC, `create_time` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '主系统商品库存批次明细' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
