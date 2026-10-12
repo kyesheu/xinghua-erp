@@ -1,0 +1,10 @@
+# 密钥与本地状态绝不进镜像
+config.local.json
+review-checkpoints.sqlite
+*.sqlite
+.venv/
+tests/
+**/__pycache__/
+*.egg-info/
+.pytest_cache/
+README.md
