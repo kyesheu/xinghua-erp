@@ -111,7 +111,12 @@ const queryParams=reactive({pageNum:1,pageSize:10,orderNum:null as string|null,w
 function getList(){loading.value=true;listShipRecord(queryParams).then((res:any)=>{shippingList.value=res.rows||[];total.value=res.total||0;loading.value=false}).catch(()=>{loading.value=false})}
 function handleQuery(){queryParams.pageNum=1;getList()}
 function resetQuery(){queryParams.orderNum=null;queryParams.waybillCode=null;queryParams.shopId=null;queryParams.sendStatus=null;handleQuery()}
-function handleTrack(row:any){wuliuguiji({waybillCode:row.waybillCode,logisticsCompany:row.logisticsCompany}).then((res:any)=>{const info=res.data||res.rows||[];ElMessage.info(info.length>0?JSON.stringify(info.slice(0,3)):'暂无物流信息')})}
+function handleTrack(row:any){
+  wuliuguiji({ waybillCode: row.waybillCode, logisticsCompany: row.logisticsCompany }).then((res:any)=>{
+    const info=res.data||res.rows||[]
+    ElMessage.info(info.length>0?JSON.stringify(info.slice(0,3)):'暂无物流信息')
+  }).catch(()=>ElMessage.error('物流轨迹查询失败，请稍后重试'))
+}
 function openShip(row:any){shipForm.id=row.id;shipForm.logisticsCompany=null;shipForm.waybillCode='';shipOpen.value=true}
 async function submitShip(){
   if(!shipForm.logisticsCompany || !shipForm.waybillCode.trim()){ElMessage.warning('请选择物流并填写运单号');return}

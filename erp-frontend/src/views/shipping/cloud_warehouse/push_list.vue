@@ -101,7 +101,12 @@ function handleQuery(){queryParams.pageNum=1;getList()}
 function resetQuery(){queryParams.orderNum=null;queryParams.waybillCode=null;queryParams.warehouseId=null;queryParams.sendStatus=null;handleQuery()}
 function handleDetail(row:any){ElMessage.info('订单号: '+row.orderNum)}
 function copyText(text:string){navigator.clipboard.writeText(text).then(()=>ElMessage.success('复制成功')).catch(()=>ElMessage.warning('不支持自动复制'))}
-function handleTrack(row:any){wuliuguiji({waybillCode:row.waybillCode,logisticsCompany:row.logisticsCompany}).then((res:any)=>{const info=res.data||res.rows||[];ElMessage.info(info.length>0?JSON.stringify(info.slice(0,3)):'暂无物流信息')})}
+function handleTrack(row:any){
+  wuliuguiji({ waybillCode: row.waybillCode, logisticsCompany: row.logisticsCompany }).then((res:any)=>{
+    const info=res.data||res.rows||[]
+    ElMessage.info(info.length>0?JSON.stringify(info.slice(0,3)):'暂无物流信息')
+  }).catch(()=>ElMessage.error('物流轨迹查询失败，请稍后重试'))
+}
 function handleQueryOrder(row:any){ElMessage.info('功能开发中')}
 
 onMounted(()=>{listCloudWarehouse({}).then((res:any)=>{warehouseList.value=res.rows||[]});getList()})
