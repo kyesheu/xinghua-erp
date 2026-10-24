@@ -119,7 +119,7 @@ services:
   #     SPRING_RABBITMQ_HOST: rabbitmq
   #     SPRING_RABBITMQ_PORT: "5672"
   #     ERP_MQ_ENABLED: "true"
-  #     SPRING_AI_DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-unused}
+  #     # 大模型密钥不在 compose 中配置：登录后在「AI 智能 > 模型配置」页面维护
   #     MINIO_ENDPOINT: http://minio:9000
   #     MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL:-http://localhost:19000}
   #     MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}

@@ -27,8 +27,9 @@
         </el-table-column>
         <el-table-column label="排序" prop="sortOrder" width="60" align="center" />
         <el-table-column label="备注" prop="remark" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
+            <el-button size="small" text type="primary" :loading="testingId === row.id" @click="handleTest(row)">测试</el-button>
             <el-button size="small" text @click="handleEdit(row)">编辑</el-button>
             <el-button size="small" text type="danger" @click="handleDelete(row)">删除</el-button>
           </template>
@@ -71,12 +72,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { listAiConfig, addAiConfig, editAiConfig, delAiConfig, setDefaultAiConfig } from '@/api/ai/config'
+import { listAiConfig, addAiConfig, editAiConfig, delAiConfig, setDefaultAiConfig, testAiConfig } from '@/api/ai/config'
 import type { AiConfig } from '@/api/ai/config'
 import type { FormInstance } from 'element-plus'
 
 const loading = ref(false)
 const saving = ref(false)
+const testingId = ref<number | null>(null)
 const list = ref<AiConfig[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -137,6 +139,21 @@ function handleSetDefault(row: AiConfig) {
     ElMessage.success('已设为默认')
     loadList()
   })
+}
+
+/** 用已保存的密钥实测一次；失败原因由请求拦截器统一弹出，这里只负责收尾 loading。 */
+async function handleTest(row: AiConfig) {
+  if (!row.id) return
+  testingId.value = row.id
+  try {
+    const res: any = await testAiConfig(row.id)
+    const reply = res.data?.reply
+    ElMessage.success(reply ? `连接正常，模型回复：${reply}` : '连接正常')
+  } catch {
+    // 错误提示已由 @/utils/request 的响应拦截器处理
+  } finally {
+    testingId.value = null
+  }
 }
 
 function handleStatusChange(row: AiConfig) {

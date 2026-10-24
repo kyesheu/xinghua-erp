@@ -55,3 +55,12 @@ export function setDefaultAiConfig(id: number) {
     method: 'put'
   })
 }
+
+/** 用已保存的配置发一次最小请求，验证地址、密钥与模型名是否可用。模型响应慢，超时放宽到 30s。 */
+export function testAiConfig(id: number) {
+  return request({
+    url: `api/ai/config/${id}/test`,
+    method: 'post',
+    timeout: 30000
+  })
+}

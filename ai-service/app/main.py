@@ -2,9 +2,9 @@ import hmac
 import os
 from pathlib import Path
 from uuid import UUID
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
-from app.core.config import shared_secret
+from app.core.config import apply_model_override, clear_model_override, shared_secret
 from app.schemas.business import BusinessFacts
 from app.workflows.business import run_business
 from app.workflows.inventory_review import sync_review
@@ -12,6 +12,23 @@ from app.workflows.marketing import MarketingFacts, run_marketing
 from app.workflows.risk import RiskFacts, run_risk
 
 app = FastAPI(title="兴华 ERP AI 服务", version="0.2.0")
+
+
+@app.middleware("http")
+async def bind_model_override(request: Request, call_next):
+    """把本次请求携带的模型参数绑到上下文：Java 侧「模型配置」页面保存的凭据由此传入。
+
+    未携带时保持空值，模型设置回退到环境变量与 config.local.json，兼容现有部署。
+    """
+    token = apply_model_override(
+        request.headers.get("x-model-api-key", ""),
+        request.headers.get("x-model-base-url", ""),
+        request.headers.get("x-model-name", ""),
+    )
+    try:
+        return await call_next(request)
+    finally:
+        clear_model_override(token)
 
 
 @app.get("/health")

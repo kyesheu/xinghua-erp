@@ -46,10 +46,8 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
-  ai:
-    deepseek:
-      # 模型密钥不入库，通过环境变量 DEEPSEEK_API_KEY 注入；不配置时 AI 能力自动降级
-      api-key: ${DEEPSEEK_API_KEY:}
+  # 大模型凭据不落在配置文件：统一由「AI 智能 > 模型配置」页面维护（存 ai_config 表），
+  # Java 侧由 AiOrchestrationService 读取，Python 服务由 PythonAgentClient 经请求头透传。
   # RabbitMQ：订单转入 OMS 后的异步通知链路；erp.mq.enabled=false 时不建连接、不启动监听，本地可无 MQ 运行。
   rabbitmq:
     host: ${SPRING_RABBITMQ_HOST:127.0.0.1}
@@ -118,14 +116,6 @@ mybatis-plus:
   type-aliases-package: cn.xinghuaerp.oms.domain;cn.xinghuaerp.module.domain;cn.xinghuaerp.system.security.entity;
 #  configuration:
 #    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl # 开启sql日志
-
-deepseek:
-  api:
-    key:
-    endpoint: https://api.deepseek.com/chat/completions
-    model: deepseek-chat
-
-
 
 # Token 配置
 token:

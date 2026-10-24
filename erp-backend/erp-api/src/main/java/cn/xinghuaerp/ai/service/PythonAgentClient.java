@@ -1,5 +1,6 @@
 package cn.xinghuaerp.ai.service;
 
+import cn.xinghuaerp.ai.entity.AiConfig;
 import cn.xinghuaerp.json.JsonUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,6 +12,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Supplier;
 
 @Service
 public class PythonAgentClient {
@@ -25,20 +27,32 @@ public class PythonAgentClient {
     private final URI endpoint;
     private final String secret;
     private final Path configFile;
+    private final Supplier<AiConfig> modelConfig;
     private final Transport transport;
     private final Transport modelTransport;
+
     record Response(int status, String body) {}
-    interface Transport { Response send(URI uri, String secret, byte[] body) throws IOException; }
+
+    /**
+     * 单次调用的请求头集合。模型参数取自「AI 智能 &gt; 模型配置」页面保存的记录，
+     * 由 Java 侧透传给 Python 服务，使页面一处配置即可同时驱动两条链路。
+     */
+    record AgentHeaders(String secret, String modelApiKey, String modelBaseUrl, String modelName) {}
+
+    interface Transport { Response send(URI uri, AgentHeaders headers, byte[] body) throws IOException; }
+
     @Autowired
     public PythonAgentClient(@Value("${ERP_AGENT_URL:http://127.0.0.1:8000}") String base,
                              @Value("${ERP_AGENT_SECRET:}") String secret,
-                             @Value("${ERP_AGENT_CONFIG:}") String config) {
+                             @Value("${ERP_AGENT_CONFIG:}") String config,
+                             AiConfigService aiConfigService) {
         this(base, secret, config == null || config.isBlank() ? defaultConfig() : Path.of(config),
-                (uri, sharedSecret, body) -> post(uri, sharedSecret, body, DEFAULT_READ_TIMEOUT_MILLIS),
-                (uri, sharedSecret, body) -> post(uri, sharedSecret, body, MODEL_READ_TIMEOUT_MILLIS));
+                aiConfigService::getDefaultConfig,
+                (uri, headers, body) -> post(uri, headers, body, DEFAULT_READ_TIMEOUT_MILLIS),
+                (uri, headers, body) -> post(uri, headers, body, MODEL_READ_TIMEOUT_MILLIS));
     }
     PythonAgentClient(String base, String secret, Transport transport) {
-        this(base, secret, defaultConfig(), transport, transport);
+        this(base, secret, defaultConfig(), null, transport, transport);
     }
     private static Path defaultConfig() {
         for (Path path : new Path[]{Path.of("ai-service/config.local.json"), Path.of("../ai-service/config.local.json"), Path.of("../../ai-service/config.local.json")}) {
@@ -47,11 +61,15 @@ public class PythonAgentClient {
         return Path.of("ai-service/config.local.json");
     }
     PythonAgentClient(String base, String secret, Path config, Transport transport) {
-        this(base, secret, config, transport, transport);
+        this(base, secret, config, null, transport, transport);
     }
     PythonAgentClient(String base, String secret, Path config, Transport transport, Transport modelTransport) {
+        this(base, secret, config, null, transport, modelTransport);
+    }
+    PythonAgentClient(String base, String secret, Path config, Supplier<AiConfig> modelConfig, Transport transport, Transport modelTransport) {
         this.endpoint = URI.create(base.replaceAll("/+$", "") + "/internal/inventory-analysis");
-        this.secret = secret; this.configFile = config; this.transport = transport; this.modelTransport = modelTransport;
+        this.secret = secret; this.configFile = config; this.modelConfig = modelConfig;
+        this.transport = transport; this.modelTransport = modelTransport;
     }
     public JsonNode analyze(Object facts) { return send(facts, endpoint, transport); }
     public JsonNode productDraft(Object facts) { return send(facts, endpoint.resolve("/internal/product-draft"), transport); }
@@ -61,17 +79,38 @@ public class PythonAgentClient {
     public JsonNode riskAnalysis(Object facts) { return send(facts, endpoint.resolve("/internal/risk-analysis"), modelTransport); }
     public JsonNode syncInventoryReview(Object task) { return send(task, endpoint.resolve("/internal/inventory-review/sync"), transport); }
     private JsonNode send(Object facts, URI target, Transport transport) {
-        String sharedSecret = resolveSecret();
-        if (sharedSecret.length() < 32) throw new IllegalStateException("AI 服务密钥未配置或长度不足");
+        AgentHeaders headers = callHeaders();
+        if (headers.secret().length() < 32) throw new IllegalStateException("AI 服务密钥未配置或长度不足");
         if (!"http".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) || endpoint.getUserInfo() != null)
             throw new IllegalStateException("AI 服务地址必须是本机 127.0.0.1 HTTP 地址");
         try {
-            Response response = transport.send(target, sharedSecret, JsonUtils.write(facts).getBytes(StandardCharsets.UTF_8));
+            Response response = transport.send(target, headers, JsonUtils.write(facts).getBytes(StandardCharsets.UTF_8));
             if (response.status() != 200 || response.body().length() > 1000000) throw new IllegalStateException("AI 服务调用失败");
             return JsonUtils.readTree(response.body());
         } catch (IOException e) {
             throw new IllegalStateException("无法连接本机 AI 服务", e);
         }
+    }
+    private AgentHeaders callHeaders() {
+        String sharedSecret = resolveSecret();
+        AiConfig model = resolveModelConfig();
+        if (model == null) return new AgentHeaders(sharedSecret, "", "", "");
+        return new AgentHeaders(sharedSecret, header(model.getApiKey()), header(model.getApiEndpoint()), header(model.getModelName()));
+    }
+    /** 读取页面配置的默认模型；读库异常不阻断调用，Python 侧会回退到环境变量与本地配置文件。 */
+    private AiConfig resolveModelConfig() {
+        if (modelConfig == null) return null;
+        try {
+            return modelConfig.get();
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+    /** 头部值不允许换行，否则会被 HttpURLConnection 判为非法头；含换行直接丢弃该字段。 */
+    private static String header(String value) {
+        if (value == null) return "";
+        String trimmed = value.trim();
+        return trimmed.indexOf('\r') >= 0 || trimmed.indexOf('\n') >= 0 ? "" : trimmed;
     }
     private String resolveSecret() {
         if (secret != null && !secret.isBlank()) return secret;
@@ -82,11 +121,15 @@ public class PythonAgentClient {
             return configured == null ? "" : configured;
         } catch (Exception e) { throw new IllegalStateException("无法读取 AI 本机配置文件"); }
     }
-    private static Response post(URI uri, String secret, byte[] body, int readTimeoutMillis) throws IOException {
+    private static Response post(URI uri, AgentHeaders headers, byte[] body, int readTimeoutMillis) throws IOException {
         var connection = (HttpURLConnection) uri.toURL().openConnection(java.net.Proxy.NO_PROXY);
         connection.setConnectTimeout(3000); connection.setReadTimeout(readTimeoutMillis); connection.setInstanceFollowRedirects(false);
         connection.setRequestMethod("POST"); connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json"); connection.setRequestProperty("X-Agent-Secret", secret);
+        connection.setRequestProperty("Content-Type", "application/json");
+        connection.setRequestProperty("X-Agent-Secret", headers.secret());
+        if (!headers.modelApiKey().isEmpty()) connection.setRequestProperty("X-Model-Api-Key", headers.modelApiKey());
+        if (!headers.modelBaseUrl().isEmpty()) connection.setRequestProperty("X-Model-Base-Url", headers.modelBaseUrl());
+        if (!headers.modelName().isEmpty()) connection.setRequestProperty("X-Model-Name", headers.modelName());
         connection.setFixedLengthStreamingMode(body.length);
         try {
             try (var out = connection.getOutputStream()) { out.write(body); }

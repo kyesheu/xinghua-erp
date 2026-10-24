@@ -5,6 +5,7 @@ import cn.xinghuaerp.system.service.AiAgentPermissionService;
 import cn.xinghuaerp.ai.entity.AiConfig;
 import cn.xinghuaerp.system.security.LoginUser;
 import cn.xinghuaerp.ai.service.AiConfigService;
+import cn.xinghuaerp.ai.service.impl.AiOrchestrationService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
@@ -34,22 +35,26 @@ class AiConfigControllerTest {
     void listWithoutPermissionIsDeniedBeforeTouchingService() {
         var service = mock(AiConfigService.class);
         var permissions = mock(AiAgentPermissionService.class);
+        var orchestration = mock(AiOrchestrationService.class);
         login(7L);
         when(permissions.allows(7L, "ai:config:list")).thenReturn(false);
-        var controller = new AiConfigController(service, permissions);
+        var controller = new AiConfigController(service, permissions, orchestration);
         assertThrows(AccessDeniedException.class, controller::list);
         assertThrows(AccessDeniedException.class, () -> controller.getById(1L));
         assertThrows(AccessDeniedException.class, () -> controller.add(new AiConfig()));
         assertThrows(AccessDeniedException.class, () -> controller.edit(new AiConfig()));
         assertThrows(AccessDeniedException.class, () -> controller.remove(1L));
         assertThrows(AccessDeniedException.class, () -> controller.setDefault(1L));
+        assertThrows(AccessDeniedException.class, () -> controller.test(1L));
         verifyNoInteractions(service);
+        verifyNoInteractions(orchestration);
     }
 
     @Test
     void listMasksApiKeyButKeepsOtherFields() {
         var service = mock(AiConfigService.class);
         var permissions = mock(AiAgentPermissionService.class);
+        var orchestration = mock(AiOrchestrationService.class);
         login(7L);
         when(permissions.allows(7L, "ai:config:list")).thenReturn(true);
         var config = new AiConfig();
@@ -57,7 +62,7 @@ class AiConfigControllerTest {
         config.setName("deepseek");
         config.setApiKey("sk-1234567890abcdef");
         when(service.list()).thenReturn(List.of(config));
-        var controller = new AiConfigController(service, permissions);
+        var controller = new AiConfigController(service, permissions, orchestration);
         AjaxResult result = controller.list();
         @SuppressWarnings("unchecked")
         List<AiConfig> data = (List<AiConfig>) result.get(AjaxResult.DATA_TAG);
@@ -69,6 +74,7 @@ class AiConfigControllerTest {
     void editWithMaskedKeyPreservesStoredSecret() {
         var service = mock(AiConfigService.class);
         var permissions = mock(AiAgentPermissionService.class);
+        var orchestration = mock(AiOrchestrationService.class);
         login(7L);
         when(permissions.allows(7L, "ai:config:list")).thenReturn(true);
         var stored = new AiConfig();
@@ -78,7 +84,7 @@ class AiConfigControllerTest {
         var incoming = new AiConfig();
         incoming.setId(1L);
         incoming.setApiKey("sk-r****-key");
-        var controller = new AiConfigController(service, permissions);
+        var controller = new AiConfigController(service, permissions, orchestration);
         controller.edit(incoming);
         assertEquals("sk-real-secret-key", incoming.getApiKey());
         verify(service).updateById(incoming);
@@ -91,5 +97,49 @@ class AiConfigControllerTest {
         assertEquals("****", AiConfigController.maskApiKey(" "));
         assertNull(AiConfigController.maskApiKey(null));
         assertEquals("abcd****wxyz", AiConfigController.maskApiKey("abcdmiddlewxyz"));
+    }
+
+    /** 测试连接用库中原文（非掩码值）验证，成功回摘要、失败回可读原因。 */
+    @Test
+    void testConnectionUsesStoredSecretAndReportsReadableFailure() {
+        var service = mock(AiConfigService.class);
+        var permissions = mock(AiAgentPermissionService.class);
+        var orchestration = mock(AiOrchestrationService.class);
+        login(7L);
+        when(permissions.allows(7L, "ai:config:list")).thenReturn(true);
+        var config = new AiConfig();
+        config.setId(1L);
+        config.setApiKey("sk-real-secret-key");
+        config.setApiEndpoint("https://api.deepseek.com/v1");
+        config.setModelName("deepseek-chat");
+        when(service.getById(1L)).thenReturn(config);
+        when(orchestration.testConnection(config)).thenReturn("pong");
+        var controller = new AiConfigController(service, permissions, orchestration);
+
+        AjaxResult ok = controller.test(1L);
+        assertTrue(ok.isSuccess());
+        verify(orchestration).testConnection(config);
+
+        when(orchestration.testConnection(config)).thenThrow(new IllegalStateException("401 Unauthorized"));
+        AjaxResult failed = controller.test(1L);
+        // 项目里 error(msg) 走 ResultVoEnum.API_FAIL，不恒等于 HttpStatus.ERROR，故按「非成功」判定
+        assertFalse(failed.isSuccess());
+        String message = String.valueOf(failed.get(AjaxResult.MSG_TAG));
+        assertTrue(message.contains("401"), "失败原因应透出，便于定位是密钥还是地址问题");
+        assertFalse(message.contains("sk-real-secret-key"), "失败提示绝不能回显密钥");
+    }
+
+    @Test
+    void testConnectionOnMissingConfigDoesNotTouchModel() {
+        var service = mock(AiConfigService.class);
+        var permissions = mock(AiAgentPermissionService.class);
+        var orchestration = mock(AiOrchestrationService.class);
+        login(7L);
+        when(permissions.allows(7L, "ai:config:list")).thenReturn(true);
+        when(service.getById(99L)).thenReturn(null);
+        var controller = new AiConfigController(service, permissions, orchestration);
+
+        assertFalse(controller.test(99L).isSuccess());
+        verifyNoInteractions(orchestration);
     }
 }

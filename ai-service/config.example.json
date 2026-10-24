@@ -1,5 +1,5 @@
 {
-  "_comment": "本文件为模板，请复制为 config.local.json 后填写真实值；agent_secret 必须替换为长度不少于 32 字符的随机串（占位值直接用会被鉴权逻辑判为非法并返回 403），model.api_key 的 sk-REPLACE_ME 同样必须替换。config.local.json 已被 .gitignore 排除，禁止把真实密钥写回本文件。",
+  "_comment": "本文件为模板，请复制为 config.local.json 后填写；agent_secret 必须替换为长度不少于 32 字符的随机串（占位值直接用会被鉴权逻辑判为非法并返回 403）。model 段是页面未配置大模型时的回退项：正常情况下请在系统「AI 智能 > 模型配置」页面填写 API 地址、密钥与模型名，此处保持 sk-REPLACE_ME 即可。config.local.json 已被 .gitignore 排除，禁止把真实密钥写回本文件。",
   "agent_secret": "REPLACE_ME_WITH_A_RANDOM_STRING_32_CHARS_MIN",
   "model": {
     "enabled": false,

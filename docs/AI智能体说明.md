@@ -44,7 +44,8 @@ AI 智能体为商家提供自然语言经营分析与人机协同的补货审�
 
 ## 模型配置
 
-- LLM 通过环境变量配置（OpenAI 兼容接口）：`AI_MODEL_ENABLED`、`AI_MODEL_NAME`、`AI_MODEL_API_KEY`、`AI_MODEL_BASE_URL`
+- LLM 在「AI 智能 > 模型配置」页面配置（OpenAI 兼容接口），后端调用本服务时经请求头透传模型地址、密钥与模型名；
+  页面未配置时回退到环境变量 `AI_MODEL_ENABLED`、`AI_MODEL_NAME`、`AI_MODEL_API_KEY`、`AI_MODEL_BASE_URL` 与 `config.local.json` 的 `model` 段
 - `AI_MODEL_ENABLED=false` 时任务规划与文案生成走纯规则路径，全部功能仍可验证，不依赖付费模型
 - 服务间调用使用 `ERP_AGENT_SECRET` 鉴权
 - 详细启动步骤见 [部署指南](部署指南.md)

@@ -22,13 +22,34 @@ import java.time.Duration;
 @Service
 public class AiOrchestrationService {
 
+    /** 模型型分析接口的读超时。 */
+    private static final int CHAT_TIMEOUT_SECONDS = 120;
+    /** 测试连接只需确认凭据可用，不宜让使用者久等。 */
+    private static final int TEST_TIMEOUT_SECONDS = 15;
+
     private final AiConfigService aiConfigService;
 
     public AiConfig getDefaultConfig() {
         return aiConfigService.getDefaultConfig();
     }
 
+    /**
+     * 用配置本身发一次最小请求，验证 API 地址、密钥与模型名是否可用。
+     * 调用方负责把异常转成可读提示，这里只抛出原始异常。
+     */
+    public String testConnection(AiConfig config) {
+        if (config == null) {
+            throw new IllegalArgumentException("模型配置不存在");
+        }
+        String reply = build(config, TEST_TIMEOUT_SECONDS, new Object[0]).prompt().user("ping").call().content();
+        return reply == null ? "" : reply;
+    }
+
     public ChatClient buildChatClient(AiConfig config, Object... tools) {
+        return build(config, CHAT_TIMEOUT_SECONDS, tools);
+    }
+
+    private ChatClient build(AiConfig config, int timeoutSeconds, Object[] tools) {
         if (config == null) {
             throw new IllegalStateException("未配置已启用的默认AI模型，请在 AI 智能 > 模型配置 中启用并设为默认");
         }
@@ -42,9 +63,9 @@ public class AiOrchestrationService {
                 .replaceAll("/+$", "");
 
         var httpClient = HttpClient.create()
-                .responseTimeout(Duration.ofSeconds(120));
+                .responseTimeout(Duration.ofSeconds(timeoutSeconds));
         var factory = new ReactorClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(Duration.ofSeconds(120));
+        factory.setReadTimeout(Duration.ofSeconds(timeoutSeconds));
 
         DeepSeekApi api = DeepSeekApi.builder()
                 .baseUrl(baseUrl)

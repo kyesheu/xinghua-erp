@@ -102,14 +102,26 @@ npx vue-tsc --noEmit -p tsconfig.app.json
 
 ## 本地配置
 
-仓库内**不包含任何明文凭据**，所有密钥通过环境变量注入。首次运行前请按需设置：
+仓库内**不包含任何明文凭据**：数据库与对象存储凭据通过环境变量注入，大模型密钥由页面维护。
+
+### 大模型配置（页面维护）
+
+登录后进入「AI 智能 > 模型配置」，填写 API 地址、API 密钥、模型名称，启用并设为默认即可。
+密钥保存在 `ai_config` 表，Java 侧的对话/分析能力与 Python 服务的工作流都从这一处读取
+（后端调用 AI 服务时经请求头透传模型地址、密钥与模型名），因此**不需要**再设置 `DEEPSEEK_API_KEY`，
+也**不需要**把密钥写进 `ai-service/config.local.json`。保存后可点行内「测试」按钮实测连通性。
+
+支持任何兼容 OpenAI 协议的服务（DeepSeek、阿里云百炼、OpenAI、Ollama 等），多个配置可共存并随时切换默认。
+
+### 环境变量
+
+首次运行前请按需设置：
 
 | 环境变量 | 用途 | 说明 |
 | --- | --- | --- |
 | `DB_PASSWORD` | MySQL 连接密码 | 有开发默认值 `xinghua-erp-dev-only`（与 compose 默认一致），生产必须通过环境变量覆盖 |
 | `MYSQL_ROOT_PASSWORD` | 容器 MySQL root 密码 | 启动 `docker compose` 前设置；未设置时使用本地占位默认值 `xinghua-erp-dev-only` |
 | `TOKEN_SECRET` | JWT 签名密钥 | 生产环境必填，默认值仅供本地开发，务必替换为足够长的随机串 |
-| `DEEPSEEK_API_KEY` | 后端 DeepSeek 模型密钥 | 不填时 AI 相关能力自动降级，其余功能不受影响 |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | 对象存储账号 | 未设置时使用本地默认 `minioadmin` / `minioadmin` |
 | `MINIO_ENDPOINT` / `MINIO_PUBLIC_URL` / `MINIO_BUCKET` | 对象存储地址与桶名 | 默认指向本机 MinIO |
 | `ERP_AGENT_SECRET` | 后端调用 AI 服务的共享密钥 | 需与 AI 服务 `agent_secret` 同时设置且长度 ≥ 32 字符，否则 AI 内部接口一律返回 403 |
@@ -120,10 +132,10 @@ npx vue-tsc --noEmit -p tsconfig.app.json
 export DB_PASSWORD=xinghua-erp-dev-only
 export MYSQL_ROOT_PASSWORD=xinghua-erp-dev-only
 export TOKEN_SECRET="$(openssl rand -hex 32)"
-export DEEPSEEK_API_KEY=sk-REPLACE_ME
 ```
 
 AI 服务的本地配置：复制 `ai-service/config.example.json` 为 `ai-service/config.local.json` 后填写 `agent_secret`、
-`model.api_key` 等字段。模板里的 `REPLACE_ME` / `sk-REPLACE_ME` 只是占位符，必须替换为真实值，且
+`listing_rules` 等字段。模板里的 `REPLACE_ME` 只是占位符，必须替换为真实值，且
 `agent_secret` 长度需 ≥ 32 字符（不足时 AI 内部接口会直接返回 403）。`config.local.json` 已在 `.gitignore` 中排除，
 **不会被提交到仓库**；也不要把真实密钥写回 `config.example.json`（该文件仅作模板随仓库分发）。
+其中的 `model` 段已是兼容旧部署的回退项，页面配置生效时会被请求头里的参数覆盖。
