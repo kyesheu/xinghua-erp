@@ -1,11 +1,6 @@
 package cn.xinghuaerp.erp.task;
 
-import tools.jackson.databind.JsonNode;
-import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.system.notify.NotifierService;
-import cn.xinghuaerp.ai.service.impl.AiOrchestrationService;
-import cn.xinghuaerp.ai.service.impl.InventoryTools;
-import cn.xinghuaerp.ai.service.impl.RefundTools;
 import cn.xinghuaerp.order.entity.ShopRefund;
 import cn.xinghuaerp.system.entity.SysMessage;
 import cn.xinghuaerp.order.vo.SalesDailyVo;
@@ -16,16 +11,19 @@ import cn.xinghuaerp.sse.SseService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
+/**
+ * 消息与预警定时任务。
+ *
+ * <p>这里的检查全部是确定性规则（阈值、计数），不调用模型：
+ * 模型侧的异常解读由 Python 服务负责，本类只在规则命中时落消息并推送。</p>
+ */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "erp.notifications.scheduler-enabled", havingValue = "true", matchIfMissing = true)
@@ -35,9 +33,6 @@ public class MessageScheduler {
     private final OOrderService orderService;
     private final ShopRefundService refundService;
     private final ISysMessageService messageService;
-    private final AiOrchestrationService orchestrationService;
-    private final RefundTools refundTools;
-    private final InventoryTools inventoryTools;
     private final NotifierService notifierService;
     private final SseService sseService;
 
@@ -94,33 +89,6 @@ public class MessageScheduler {
     private void checkOrderTimeout() {
         // TODO: query OOrder with status 0/1 and createTime > 4h
         // save("order_timeout", "medium", "发货超时提醒", "n 个订单超过 4 小时未发货")
-    }
-
-    private void checkAiAnalysis() {
-        try {
-            ChatClient cc = orchestrationService.buildDefaultChatClient(refundTools, inventoryTools);
-            String result = CompletableFuture.supplyAsync(() ->
-                    cc.prompt().user("""
-                            你是电商运营监控助手，请查询数据检查是否存在异常：
-
-                            如果有异常，按以下格式返回JSON数组，没有则返回[]：
-                            [{"type":"ai_analysis","level":"high","title":"异常标题","content":"异常描述"}]
-                            只返回JSON数组，不要其他文字。
-                            """).call().content()
-            ).get(60, TimeUnit.SECONDS);
-
-            if (result == null || result.isBlank() || result.trim().equals("[]")) return;
-
-            String json = result.trim().replaceAll("```json\\s*", "").replaceAll("```\\s*", "");
-            if (!json.startsWith("[")) { int i = json.indexOf("["); if (i >= 0) json = json.substring(i); else return; }
-
-            var items = JsonUtils.readList(json, JsonNode.class);
-            for (var item : items) {
-                save("ai_analysis", JsonUtils.text(item, "level"), JsonUtils.text(item, "title"), JsonUtils.text(item, "content"), "", "ai");
-            }
-        } catch (Exception e) {
-            log.warn("AI消息检查失败", e);
-        }
     }
 
     private void save(String type, String level, String title, String content, String link, String source) {

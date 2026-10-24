@@ -5,8 +5,6 @@ import cn.xinghuaerp.purchase.service.ErpPurchaseOrderService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,12 +17,10 @@ import java.util.List;
 public class PurchaseTools {
 
     private final ErpPurchaseOrderService purchaseOrderService;
-
-    @Tool(description = "查询采购单列表，可按天数和状态筛选，返回每条记录的采购单号、供应商、金额、状态、创建时间")
     public String getPurchaseOrderList(
-            @ToolParam(description = "查询最近多少天的采购单，默认90天") Integer days,
-            @ToolParam(description = "采购单状态：0待审核 1已审核 101供应商已确认 102供应商已发货 2已收货 3已入库。不传则查全部") Integer status,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer days,
+            Integer status,
+            Integer limit) {
         if (days == null || days <= 0) days = 90;
         if (limit == null || limit <= 0) limit = 100;
 

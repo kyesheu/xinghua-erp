@@ -9,8 +9,6 @@ import cn.xinghuaerp.product.service.OGoodsService;
 import cn.xinghuaerp.product.service.OGoodsSkuService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -22,10 +20,8 @@ public class GoodsTools {
 
     private final OGoodsService goodsService;
     private final OGoodsSkuService skuService;
-
-    @Tool(description = "根据商品名称关键词搜索ERP商品库中的商品，返回商品名称、编号、零售价、SKU数量等信息")
     public String searchGoods(
-            @ToolParam(description = "商品名称搜索关键词") String keyword) {
+            String keyword) {
         log.info("======Tool查询商品:{}",keyword);
         GoodsQuery query = new GoodsQuery();
         query.setName(keyword);
@@ -54,10 +50,8 @@ public class GoodsTools {
         }
         return sb.toString();
     }
-
-    @Tool(description = "根据SKU编码、SKU名称或商品名称搜索ERP商品库中的SKU信息，返回SKU编码、名称、价格、规格等详细信息")
     public String searchSku(
-            @ToolParam(description = "搜索关键词，可以是SKU编码、SKU名称或商品名称") String keyword) {
+            String keyword) {
         List<OGoodsSku> list = skuService.searchGoodsSpec(keyword);
 
         if (list == null || list.isEmpty()) {

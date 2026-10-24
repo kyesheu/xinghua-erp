@@ -39,7 +39,7 @@ public class ChatController extends BaseController {
         }
 
         SseEmitter emitter = new SseEmitter(180000L);
-        chatService.streamResponse(config, emitter, sessionId, userId);
+        chatService.streamResponse(emitter, sessionId, userId);
         return emitter;
     }
 

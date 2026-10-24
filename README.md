@@ -10,7 +10,7 @@
 - **采购管理**：采购单、供应商与报价、采购入库任务核对
 - **财务**：结算单利润核算（销售额 − 批次成本 − 运费 − 费用单）、财务流水、平台账单导入
 - **权限体系**：RBAC 接口权限 + 总部/商户/店铺三级主体数据范围，服务端 SQL 层过滤防横向越权
-- **AI 智能体**：自然语言经营分析（多主题并行）、SKU 表现排行、订单级亏损穿透、多店对比、明细导出、库存补货人工审核闭环
+- **AI 智能体**：AI 助手对话（模型自主调用工具取数）、自然语言经营分析（多主题并行）、SKU 表现排行、订单级亏损穿透、多店对比、明细导出、库存补货人工审核闭环
 
 完整清单见 [功能说明](docs/功能说明.md)。
 
@@ -36,9 +36,10 @@
 │   ├── erp-inventory/          #   库存：仓库/库存/出入库/备货/锁定/调拨
 │   ├── erp-purchase/           #   采购：采购单/采购入库/供应商
 │   ├── erp-finance/            #   财务与报表：成本/结算/费用/账本 + 仪表盘/经营统计
-│   └── erp-api/                #   启动与组装：全局配置、REST、MQ、定时任务、AI 接口
+│   └── erp-api/                #   启动与组装：全局配置、REST、MQ、定时任务、AI 工具网关
 ├── ai-service/                 # Python AI 服务（FastAPI + LangGraph）
-│   ├── app/workflows/          #   LangGraph 工作流：多主题并行分析、库存补货人机审核等
+│   ├── app/workflows/          #   LangGraph 工作流：对话与分析编排、多主题并行分析、库存补货人机审核等
+│   ├── app/tools/              #   模型可用工具：query_erp 经 HTTP 回调 Java 取数
 │   ├── app/core/               #   配置加载
 │   ├── app/schemas/            #   业务数据模型（Pydantic）
 │   ├── app/rules/              #   库存/补货规则
@@ -113,6 +114,15 @@ npx vue-tsc --noEmit -p tsconfig.app.json
 
 支持任何兼容 OpenAI 协议的服务（DeepSeek、阿里云百炼、OpenAI、Ollama 等），多个配置可共存并随时切换默认。
 
+### 本地配置文件（application-dev.yml）
+
+本机相关的值（数据库密码、Redis 密码、对象存储账号）建议写在
+`erp-backend/erp-api/src/main/resources/application-dev.yml`：把同目录的 `application-dev.yml.example`
+复制一份改名即可。该文件已在 `.gitignore` 中排除，**不会被提交**；`.example` 只作模板随仓库分发。
+
+`application.yml` 的 `spring.profiles.active` 默认为 `dev`（可用环境变量 `SPRING_PROFILES_ACTIVE` 覆盖），
+存在 `application-dev.yml` 时会自动叠加，同名键优先级更高。全新克隆的仓库没有这个文件也能正常启动。
+
 ### 环境变量
 
 首次运行前请按需设置：
@@ -125,6 +135,7 @@ npx vue-tsc --noEmit -p tsconfig.app.json
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | 对象存储账号 | 未设置时使用本地默认 `minioadmin` / `minioadmin` |
 | `MINIO_ENDPOINT` / `MINIO_PUBLIC_URL` / `MINIO_BUCKET` | 对象存储地址与桶名 | 默认指向本机 MinIO |
 | `ERP_AGENT_SECRET` | 后端调用 AI 服务的共享密钥 | 需与 AI 服务 `agent_secret` 同时设置且长度 ≥ 32 字符，否则 AI 内部接口一律返回 403 |
+| `ERP_BACKEND_URL` | AI 服务回调后端的地址 | 默认 `http://127.0.0.1:6149`；工具调用经此回查业务数据，需与后端实际监听地址一致 |
 
 示例（Git Bash）：
 

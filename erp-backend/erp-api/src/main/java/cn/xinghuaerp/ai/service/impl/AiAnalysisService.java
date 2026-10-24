@@ -5,41 +5,39 @@ import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.ai.entity.AiAnalysisRecord;
 import cn.xinghuaerp.ai.entity.AiConfig;
 import cn.xinghuaerp.ai.service.AiConfigService;
+import cn.xinghuaerp.ai.service.AiTaskExecutor;
 import cn.xinghuaerp.ai.service.IAiAnalysisRecordService;
+import cn.xinghuaerp.ai.service.PythonAgentClient;
+import cn.xinghuaerp.ai.service.ToolToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * AI智能分析服务 - 基于预设模板 + tool-calling 执行深度分析
+ * AI 智能分析：模板与记录留在 Java，模型调用与工具循环交给 Python 服务。
+ *
+ * <p>分析失败分两种：模型明确报错（未配置、密钥无效）如实转达；
+ * 服务连不上则退回本地数据摘要，保证页面仍有可读结果。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiAnalysisService {
 
-    private final AiOrchestrationService orchestrationService;
     private final AiConfigService aiConfigService;
     private final IAiAnalysisRecordService analysisRecordService;
-
-    private final GoodsTools goodsTools;
-    private final OrderTools orderTools;
-    private final RefundTools refundTools;
-    private final InventoryTools inventoryTools;
-    private final ShopTools shopTools;
-    private final PurchaseTools purchaseTools;
-    private final MemberTools memberTools;
-    private final SupplierTools supplierTools;
-    private final LogisticsTools logisticsTools;
-    private final WarehouseTools warehouseTools;
-    private final StockFlowTools stockFlowTools;
+    private final PythonAgentClient python;
+    private final ToolToken toolToken;
+    private final AiTaskExecutor executor;
+    private final AiAnalysisFallback fallback;
 
     private static final String SYSTEM_PROMPT = """
             你是兴华电商ERP系统的AI智能分析专家。你的职责是根据分析任务，调用工具获取真实业务数据，然后进行深度分析，输出结构化的分析报告。
@@ -107,9 +105,7 @@ public class AiAnalysisService {
                     请调用工具获取采购数据、供应商数据和库存数据后进行分析。"""
     );
 
-    /**
-     * 执行分析并流式返回结果
-     */
+    /** 执行分析并流式返回结果。 */
     public void executeAnalysis(String analysisType, String userContent, SseEmitter emitter, Long userId) {
         AtomicBoolean emitterDone = new AtomicBoolean(false);
 
@@ -128,15 +124,10 @@ public class AiAnalysisService {
         record.setCreatedTime(LocalDateTime.now());
         record.setUpdatedTime(LocalDateTime.now());
 
-        String templatePrompt = ANALYSIS_PROMPTS.getOrDefault(analysisType, ANALYSIS_PROMPTS.get("sales"));
+        String templatePrompt = ANALYSIS_PROMPTS.getOrDefault(analysisType == null ? "" : analysisType, ANALYSIS_PROMPTS.get("sales"));
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-        String fullPrompt;
-        if (userContent != null && !userContent.isBlank()) {
-            fullPrompt = userContent;
-        } else {
-            fullPrompt = templatePrompt;
-        }
+        String fullPrompt = userContent != null && !userContent.isBlank() ? userContent : templatePrompt;
         fullPrompt = "当前时间：" + now + "\n\n" + fullPrompt;
         record.setPromptContent(fullPrompt);
 
@@ -148,42 +139,62 @@ public class AiAnalysisService {
 
         sendEventSafe(emitter, emitterDone, "analysis_start", String.valueOf(record.getId()));
 
-        ChatClient chatClient = orchestrationService.buildChatClient(config,
-                goodsTools, orderTools, refundTools, inventoryTools, shopTools,
-                purchaseTools, memberTools, supplierTools, logisticsTools,
-                warehouseTools, stockFlowTools);
-
-        StringBuilder fullResponse = new StringBuilder();
-
-        chatClient.prompt()
-                .system(SYSTEM_PROMPT)
-                .user(fullPrompt)
-                .stream()
-                .content()
-                .subscribe(
-                        chunk -> {
-                            fullResponse.append(chunk);
-                            sendEventSafe(emitter, emitterDone, "message", chunk);
-                        },
-                        error -> {
-                            log.error("AI分析流式响应错误", error);
-                            record.setStatus(2);
-                            record.setErrorMessage(error.getMessage());
-                            record.setUpdatedTime(LocalDateTime.now());
-                            try { analysisRecordService.save(record); } catch (Exception ignored) {}
-                            sendEventSafe(emitter, emitterDone, "error", "分析出错: " + error.getMessage());
-                            completeSafe(emitter, emitterDone);
-                        },
-                        () -> {
-                            String result = fullResponse.toString();
-                            record.setAnalysisResult(result);
-                            record.setStatus(1);
-                            record.setUpdatedTime(LocalDateTime.now());
-                            try { analysisRecordService.save(record); } catch (Exception ignored) {}
-                            sendEventSafe(emitter, emitterDone, "done", String.valueOf(record.getId()));
-                            completeSafe(emitter, emitterDone);
+        String prompt = fullPrompt;
+        executor.submit(() -> {
+            StringBuilder fullResponse = new StringBuilder();
+            AtomicBoolean modelRejected = new AtomicBoolean(false);
+            try {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("system", SYSTEM_PROMPT);
+                body.put("prompt", prompt);
+                python.stream("/internal/analysis", body, toolToken.issue(userId), (type, content) -> {
+                    switch (type) {
+                        case "message" -> {
+                            fullResponse.append(content);
+                            sendEventSafe(emitter, emitterDone, "message", content);
                         }
-                );
+                        case "error" -> {
+                            modelRejected.set(true);
+                            sendEventSafe(emitter, emitterDone, "error", content);
+                        }
+                        default -> { }
+                    }
+                });
+                if (modelRejected.get()) {
+                    fail(record, "AI 分析未完成", emitter, emitterDone);
+                } else if (fullResponse.isEmpty()) {
+                    fail(record, "AI 分析未返回内容", emitter, emitterDone);
+                } else {
+                    complete(record, fullResponse.toString(), emitter, emitterDone);
+                }
+            } catch (Exception e) {
+                log.warn("AI 分析调用失败，返回本地数据摘要: {}", e.getMessage());
+                fail(record, "AI 服务不可用：" + e.getMessage(), emitter, emitterDone);
+            }
+        });
+    }
+
+    /** 成功路径：记录模型产出。 */
+    private void complete(AiAnalysisRecord record, String result, SseEmitter emitter, AtomicBoolean done) {
+        record.setAnalysisResult(result);
+        record.setStatus(1);
+        record.setUpdatedTime(LocalDateTime.now());
+        try { analysisRecordService.save(record); } catch (Exception ignored) { }
+        sendEventSafe(emitter, done, "done", String.valueOf(record.getId()));
+        completeSafe(emitter, done);
+    }
+
+    /** 失败路径：把本地数据摘要作为结果压入同一份记录，前端体验与成功一致。 */
+    private void fail(AiAnalysisRecord record, String reason, SseEmitter emitter, AtomicBoolean done) {
+        String local = fallback.build(record.getAnalysisType());
+        record.setAnalysisResult(local);
+        record.setStatus(1);
+        record.setErrorMessage(reason);
+        record.setUpdatedTime(LocalDateTime.now());
+        try { analysisRecordService.save(record); } catch (Exception ignored) { }
+        sendEventSafe(emitter, done, "message", local);
+        sendEventSafe(emitter, done, "done", String.valueOf(record.getId()));
+        completeSafe(emitter, done);
     }
 
     private void sendEventSafe(SseEmitter emitter, AtomicBoolean done, String type, String content) {

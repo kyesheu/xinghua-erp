@@ -5,8 +5,6 @@ import cn.xinghuaerp.inventory.service.OGoodsInventoryService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -17,11 +15,9 @@ import java.util.List;
 public class InventoryTools {
 
     private final OGoodsInventoryService inventoryService;
-
-    @Tool(description = "查询SKU库存列表，可按可用库存范围筛选，返回每条记录的SKU名称、编码、可用库存、仓库ID")
     public String getInventoryList(
-            @ToolParam(description = "查询可用库存小于等于此值的SKU。不传则查全部") Integer availableLte,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer availableLte,
+            Integer limit) {
         if (limit == null || limit <= 0) limit = 100;
 
         LambdaQueryWrapper<OGoodsInventory> wrapper = new LambdaQueryWrapper<>();

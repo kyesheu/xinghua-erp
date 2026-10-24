@@ -5,8 +5,6 @@ import cn.xinghuaerp.fulfillment.service.OOrderShipWaybillService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,12 +17,10 @@ import java.util.List;
 public class LogisticsTools {
 
     private final OOrderShipWaybillService waybillService;
-
-    @Tool(description = "查询物流运单列表，可按天数和状态筛选，返回每条记录的快递单号、快递公司、订单号、状态、创建时间")
     public String getWaybillList(
-            @ToolParam(description = "查询最近多少天的运单，默认30天") Integer days,
-            @ToolParam(description = "运单状态：1已取号 2已打印 3已发货。不传则查全部") Integer status,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer days,
+            Integer status,
+            Integer limit) {
         if (days == null || days <= 0) days = 30;
         if (limit == null || limit <= 0) limit = 100;
 

@@ -4,22 +4,25 @@ import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.ai.entity.AiConfig;
 import cn.xinghuaerp.order.vo.SalesDailyVo;
 import cn.xinghuaerp.ai.service.AiConfigService;
+import cn.xinghuaerp.ai.service.PythonAgentClient;
 import cn.xinghuaerp.order.service.OOrderItemService;
 import cn.xinghuaerp.order.service.OOrderService;
 import cn.xinghuaerp.system.service.OShopService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import tools.jackson.databind.JsonNode;
+
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * AI简报服务 - 为管理者生成智能工作台简报
+ *
+ * <p>模型生成在 Python 服务里完成；Java 负责汇总今日数据、组装提示词、解析结构，
+ * 并在模型不可用时退回固定文案版简报。</p>
  */
 @Slf4j
 @Service
@@ -30,7 +33,9 @@ public class AiBriefService {
     private final OOrderItemService orderItemService;
     private final OShopService shopService;
     private final AiConfigService aiConfigService;
-    private final AiOrchestrationService orchestrationService;
+    private final PythonAgentClient python;
+
+    private static final String SYSTEM_PROMPT = "你是电商运营助手，只输出 JSON，不要输出 markdown 标记或解释。";
 
     /**
      * 生成AI工作台简报
@@ -54,16 +59,14 @@ public class AiBriefService {
 
         // 3. 调用AI生成简报
         try {
-            return callAiForBrief(dbConfig, todayData, recentSales);
+            return callAiForBrief(todayData, recentSales);
         } catch (Exception e) {
             log.warn("AI简报生成失败，使用本地降级", e);
             return buildFallbackBrief(todayData, recentSales, true);
         }
     }
 
-    private AiBriefResponse callAiForBrief(AiConfig config, Map<String, Object> todayData, List<SalesDailyVo> recentSales) {
-        ChatClient chatClient = orchestrationService.buildChatClient(config);
-
+    private AiBriefResponse callAiForBrief(Map<String, Object> todayData, List<SalesDailyVo> recentSales) {
         // 构建销售趋势文本
         StringBuilder trendText = new StringBuilder();
         if (recentSales != null && recentSales.size() >= 2) {
@@ -129,19 +132,17 @@ public class AiBriefService {
         );
 
         try {
-            String response = CompletableFuture.supplyAsync(() ->
-                            chatClient.prompt()
-                                    .user(prompt)
-                                    .call()
-                                    .content()
-                    )
-                    .get(120, TimeUnit.SECONDS);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("system", SYSTEM_PROMPT);
+            body.put("prompt", prompt);
+            JsonNode reply = python.brief(body, "");
+            String response = reply == null ? null : JsonUtils.text(reply, "text");
+            if (response == null || response.isBlank()) {
+                throw new IllegalStateException("AI 服务未返回简报内容");
+            }
             return parseAiResponse(response, todayData);
-        } catch (TimeoutException e) {
-            log.warn("AI接口响应超时，使用降级数据", e);
-            return buildFallbackBrief(todayData, recentSales, true);
         } catch (Exception e) {
-            log.warn("AI调用失败，使用降级", e);
+            log.warn("AI简报生成失败，使用本地降级: {}", e.getMessage());
             return buildFallbackBrief(todayData, recentSales, true);
         }
     }

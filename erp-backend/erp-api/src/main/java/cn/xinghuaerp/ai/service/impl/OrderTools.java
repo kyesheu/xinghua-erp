@@ -5,8 +5,6 @@ import cn.xinghuaerp.order.service.ShopOrderService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,12 +17,10 @@ import java.util.List;
 public class OrderTools {
 
     private final ShopOrderService orderService;
-
-    @Tool(description = "查询店铺订单列表，可按天数和订单状态筛选，返回每条记录的订单号、订单金额(分)、支付金额(分)、收件人、收货地址、订单状态、发货状态、下单时间")
     public String getOrderList(
-            @ToolParam(description = "查询最近多少天的订单，默认30天") Integer days,
-            @ToolParam(description = "订单状态：0新订单 1待发货 2已发货 3已完成 11已取消 12退款中 13已关闭 21待付款。不传则查全部") Integer orderStatus,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer days,
+            Integer orderStatus,
+            Integer limit) {
         if (days == null || days <= 0) days = 30;
         if (limit == null || limit <= 0) limit = 100;
 

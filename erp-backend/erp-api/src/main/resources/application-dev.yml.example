@@ -1,0 +1,29 @@
+# 本地 / 测试环境配置模板
+#
+# 用法：复制为同目录下的 application-dev.yml（该文件已被 .gitignore 排除，不会入库），再按本机情况修改。
+# application.yml 中 spring.profiles.active 默认为 dev，存在 application-dev.yml 时会自动叠加，
+# 且同名键的优先级高于 application.yml —— 所以本机数据库密码、端口这类环境相关值放这里，不用改主配置。
+#
+# 本文件（.example）随仓库分发，禁止写入真实密码或密钥。
+
+spring:
+  datasource:
+    # 本机 MySQL 密码，需与 docker/docker-compose.yml 的 MYSQL_ROOT_PASSWORD 一致
+    password: xinghua-erp-dev-only
+    # 数据库地址按需覆盖（默认 127.0.0.1:13370/xinghua-erp）
+    # url: jdbc:mysql://127.0.0.1:13370/xinghua-erp?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8
+  data:
+    redis:
+      # 启用 Redis 认证时填写，未启用则保持注释
+      # password: YOUR_REDIS_PASSWORD
+
+token:
+  # JWT 签名密钥，本地也建议换成随机串：openssl rand -hex 32
+  secret: xinghua-erp-dev-token-secret-change-in-production
+
+minio:
+  access-key: minioadmin
+  secret-key: minioadmin
+
+# 大模型密钥不在这里配置：统一由「AI 智能 > 模型配置」页面维护（存 ai_config 表），
+# 首次启动不需要任何模型密钥，配好之后对话与分析能力才可用。

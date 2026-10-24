@@ -7,8 +7,6 @@ import cn.xinghuaerp.inventory.service.ErpStockOutService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -22,12 +20,10 @@ public class StockFlowTools {
 
     private final ErpStockInService stockInService;
     private final ErpStockOutService stockOutService;
-
-    @Tool(description = "查询入库单列表，可按天数和入库类型筛选，返回每条记录的入库单号、类型、来源单号、状态、入库时间")
     public String getStockInList(
-            @ToolParam(description = "查询最近多少天的入库单，默认30天") Integer days,
-            @ToolParam(description = "入库类型：1采购入库 2退货入库。不传则查全部") Integer stockInType,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer days,
+            Integer stockInType,
+            Integer limit) {
         if (days == null || days <= 0) days = 30;
         if (limit == null || limit <= 0) limit = 100;
 
@@ -75,12 +71,10 @@ public class StockFlowTools {
 
         return sb.toString();
     }
-
-    @Tool(description = "查询出库单列表，可按天数和类型筛选，返回每条记录的出库单号、类型、来源单号、状态、出库时间")
     public String getStockOutList(
-            @ToolParam(description = "查询最近多少天的出库单，默认30天") Integer days,
-            @ToolParam(description = "出库类型：1订单发货出库 2采购退货出库 3盘点出库 4报损出库。不传则查全部") Integer type,
-            @ToolParam(description = "返回的最大记录数，默认100条") Integer limit) {
+            Integer days,
+            Integer type,
+            Integer limit) {
         if (days == null || days <= 0) days = 30;
         if (limit == null || limit <= 0) limit = 100;
 

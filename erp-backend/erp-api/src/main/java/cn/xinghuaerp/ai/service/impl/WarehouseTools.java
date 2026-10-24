@@ -5,7 +5,6 @@ import cn.xinghuaerp.inventory.service.ErpWarehouseService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -17,8 +16,6 @@ import java.util.stream.Collectors;
 public class WarehouseTools {
 
     private final ErpWarehouseService warehouseService;
-
-    @Tool(description = "查询仓库列表，返回每条记录的仓库名称、类型、状态、地址信息")
     public String getWarehouseList() {
         LambdaQueryWrapper<ErpWarehouse> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ErpWarehouse::getStatus, "ENABLE");

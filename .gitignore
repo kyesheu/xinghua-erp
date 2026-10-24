@@ -81,6 +81,8 @@ logs
 ### 本地密钥与配置（禁止入库） ###
 # ai-service/config.local.json 含模型与智能体密钥，仅保留 config.example.json 作为模板
 /ai-service/config.local.json
+# 本地/测试环境配置：可能含本机数据库密码，仅保留 application-dev.yml.example 作为模板
+/erp-backend/erp-api/src/main/resources/application-dev.yml
 .env.local
 .env.*.local
 

@@ -2,6 +2,9 @@ server:
   port: 6149
 
 spring:
+  # 本服务不装配任何模型客户端：模型调用全部由 ai-service（Python + LangGraph）承担，
+  # 模型凭据在「AI 智能 > 模型配置」页面维护，调用时经请求头透传给 AI 服务。
+  # 因此这里没有 spring.ai.* 配置，未配置密钥也能正常启动。
   servlet:
     multipart:
       max-file-size: 5MB
@@ -9,7 +12,8 @@ spring:
   application:
     name: erp-api
   profiles:
-    active: dev
+    # 本地/测试环境可放 application-dev.yml（已在 .gitignore 中排除，不会入库）
+    active: ${SPRING_PROFILES_ACTIVE:dev}
 
   data:
     # redis 配置

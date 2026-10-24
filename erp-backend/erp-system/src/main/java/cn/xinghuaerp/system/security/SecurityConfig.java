@@ -92,6 +92,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/sys-api/login").permitAll()
                         // SSE 推送通知放行
                         .requestMatchers("/api/erp-api/sse/notify_msg").permitAll()
+                        // AI 工具网关：供本机 Python 服务回调查数据。
+                        // 不走 JWT，但要求「仅本机 + 共享密钥 + 短时工具令牌」三重校验，见 AiToolGateway。
+                        .requestMatchers("/internal/**").permitAll()
                         // 允许 SpringMVC 的默认错误地址匿名访问
                         .requestMatchers("/error").permitAll()
                         // 其他所有接口必须有Authority信息，Authority在登录成功后的UserDetailsImpl对象中默认设置"ROLE_USER"

@@ -5,8 +5,6 @@ import cn.xinghuaerp.order.service.ShopMemberService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,11 +17,9 @@ import java.util.List;
 public class MemberTools {
 
     private final ShopMemberService memberService;
-
-    @Tool(description = "查询会员/客户列表，可按名称或手机号关键词搜索，返回每条记录的姓名、手机号、收货地址、所属平台、创建时间")
     public String getMemberList(
-            @ToolParam(description = "搜索关键词，匹配姓名或手机号") String keyword,
-            @ToolParam(description = "返回的最大记录数，默认50条") Integer limit) {
+            String keyword,
+            Integer limit) {
         if (limit == null || limit <= 0) limit = 50;
 
         LambdaQueryWrapper<ShopMember> wrapper = new LambdaQueryWrapper<>();

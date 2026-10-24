@@ -111,4 +111,22 @@ class PythonAgentClientTest {
         assertEquals("", seen.get().modelApiKey());
         assertEquals("deepseek-chat", seen.get().modelName());
     }
+
+    /** 流式响应按行解析：事件类型原样透传，非 JSON 行降级为文本，不能整段丢弃。 */
+    @Test void dispatchesNdjsonEventsAndKeepsPlainText() {
+        var seen = new java.util.ArrayList<String>();
+        PythonAgentClient.StreamListener listener = (type, content) -> seen.add(type + ":" + content);
+        PythonAgentClient.dispatch("{\"type\":\"message\",\"content\":\"你好\"}", listener);
+        PythonAgentClient.dispatch("{\"type\":\"done\"}", listener);
+        PythonAgentClient.dispatch("纯文本一行", listener);
+        assertEquals(java.util.List.of("message:你好", "done:", "message:纯文本一行"), seen);
+    }
+
+    /** 错误体里的 detail 要透出，否则页面只能看到「调用失败」而不知道原因。 */
+    @Test void surfacesPythonErrorDetail() {
+        var client = new PythonAgentClient("http://127.0.0.1:8000", "s".repeat(32),
+                (uri, headers, body) -> new PythonAgentClient.Response(409, "{\"detail\":\"未配置已启用的模型\"}"));
+        var error = assertThrows(IllegalStateException.class, () -> client.brief(Map.of("prompt", "x"), ""));
+        assertEquals("未配置已启用的模型", error.getMessage());
+    }
 }

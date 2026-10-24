@@ -3,7 +3,6 @@ package cn.xinghuaerp.ai.service.impl;
 import cn.xinghuaerp.system.service.OShopService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -12,8 +11,6 @@ import org.springframework.stereotype.Component;
 public class ShopTools {
 
     private final OShopService shopService;
-
-    @Tool(description = "获取所有店铺列表，返回每条记录的店铺名称、平台类型")
     public String getShopList() {
         var shops = shopService.list();
         if (shops == null || shops.isEmpty()) {

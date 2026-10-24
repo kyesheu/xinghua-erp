@@ -5,8 +5,6 @@ import cn.xinghuaerp.order.service.ShopRefundService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.tool.annotation.Tool;
-import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -19,13 +17,11 @@ import java.util.List;
 public class RefundTools {
 
     private final ShopRefundService refundService;
-
-    @Tool(description = "查询退款记录列表，可按天数、退款原因、商品名筛选，返回每条记录的商品名、退款原因、退款金额(分)、申请时间、售后状态")
     public String getRefundList(
-            @ToolParam(description = "查询最近多少天的退款，默认90天") Integer days,
-            @ToolParam(description = "按退款原因筛选。不传则查全部") String reason,
-            @ToolParam(description = "按商品名称筛选。不传则查全部") String goodsName,
-            @ToolParam(description = "返回的最大记录数，默认200条") Integer limit) {
+            Integer days,
+            String reason,
+            String goodsName,
+            Integer limit) {
         if (days == null || days <= 0) days = 90;
         if (limit == null || limit <= 0) limit = 200;
 
