@@ -56,18 +56,18 @@
 
 ```bash
 # 1. 基础设施（MySQL/Redis/MinIO/RabbitMQ，在 docker/ 目录下执行）
+#    MySQL 首次启动会自动按序执行 docs/sql 下的 10 个初始化脚本（建表、基础数据、AI 权限），
+#    无需手工导库；等 docker compose ps 里 mysql 变成 healthy 再进行下一步
 cd docker && docker compose up -d && cd ..
 
-# 2. 执行数据库迁移脚本（清单见部署指南）
-
-# 3. 启动后端（端口 6149）
+# 2. 启动后端（端口 6149）
 mvn -f erp-backend/pom.xml clean install
 java -jar erp-backend/erp-api/target/erp-api-4.1.0.jar
 
-# 4. 启动前端
+# 3. 启动前端
 cd erp-frontend && npm install && npm run dev
 
-# 5. 启动 AI 服务（端口 8000，无需模型密钥即可运行）
+# 4. 启动 AI 服务（端口 8000，无需模型密钥即可运行）
 cd ai-service && python -m venv .venv
 .venv/Scripts/pip install -e .
 .venv/Scripts/uvicorn app.main:app --port 8000
