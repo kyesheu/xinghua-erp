@@ -6844,7 +6844,10 @@ INSERT INTO `sys_menu` VALUES (2180, '通知渠道', 5, 3, 'alertChannel', 'syst
 DROP TABLE IF EXISTS `sys_open_auth`;
 CREATE TABLE `sys_open_auth`  (
   `id` bigint NOT NULL AUTO_INCREMENT,
-  `app_key` varchar(25) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'AppKey',
+  -- 原定义 varchar(25)，但下方种子数据 `xinghuacli20260422cli00021` 为 26 字符，
+  -- 导入会触发 ERROR 1406（Data too long），使 mysql 客户端在批量模式下中断，
+  -- 其后的 sys_message / sys_oss / sys_role / wms_* / ai_config 等表全部不会创建。
+  `app_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'AppKey',
   `app_secret` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '密钥',
   `request_ip` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '最后一次请求ip',
   `request_time` datetime NULL DEFAULT NULL COMMENT '最后一次请求时间',

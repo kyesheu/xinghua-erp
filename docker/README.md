@@ -13,11 +13,41 @@
 ## 常用命令（在本目录执行）
 
 ```bash
-docker compose up -d          # 启动 MySQL/Redis/MinIO/RabbitMQ（首次会自动导入 ../docs/sql/xinghua-erp.sql）
+docker compose up -d          # 启动 MySQL/Redis/MinIO/RabbitMQ（首次会自动初始化数据库）
 docker compose ps             # 查看状态与健康检查
 docker compose down           # 停止（保留数据卷）
 docker compose down -v        # 停止并清空数据卷（下次启动重新初始化数据库）
 ```
+
+## 数据库初始化（重要）
+
+MySQL 只在**数据卷为空**时执行初始化，脚本按容器内文件名顺序运行：
+
+| 顺序 | 宿主文件 | 容器内路径 | 作用 |
+|---|---|---|---|
+| 01 | `../docs/sql/xinghua-erp.sql` | `01-xinghua-erp.sql` | 主库结构与基础数据（145 张表） |
+| 02 | `../docs/sql/ai-inventory-review.sql` | `02-ai-inventory-review.sql` | 库存补货人机审核任务表 |
+| 03 | `../docs/sql/ai-purchase-draft.sql` | `03-ai-purchase-draft.sql` | Agent 采购草稿幂等记录表 |
+| 04 | `../docs/sql/business-user-binding-migration.sql` | `04-business-user-binding.sql` | 账号与业务主体绑定表 |
+| 05–10 | `../docs/sql/ai-*-permission.sql`、`ai-finance-settlement.sql` | 对应编号 | AI 各查询权限与结算执行权限的菜单项（幂等，不授予任何角色） |
+
+注意两点：
+
+- **一条 SQL 报错会导致其后的语句整段不执行**（mysql 客户端批量模式遇错即停）。历史上主 SQL 里
+  `sys_open_auth.app_key` 定义为 `varchar(25)` 而种子数据是 26 字符，导入在第 6865 行中断，
+  其后的 `sys_message`、`sys_user`、`sys_role`、`wms_*`、`ai_config` 等 23 张表全部没建出来，但容器依然"健康"。
+  该字段已改为 `varchar(64)`。
+- 因此健康检查不只 `SELECT 1`，还会校验 `sys_message`、`sys_user`、`ai_config`、`ai_inventory_review_task`
+  四张"最后才创建"的表是否齐全。若初始化失败，MySQL 容器会停在 `unhealthy`，`docker compose ps` 能直接看出来。
+
+排查初始化失败：
+
+```bash
+docker logs xinghua-erp-mysql-1 2>&1 | grep -E "running /docker-entrypoint-initdb.d|ERROR"
+docker compose down -v && docker compose up -d   # 修好 SQL 后必须清卷重建，否则不会重新导入
+```
+
+物流公司基础数据（2373 条）已在主 SQL 内，`docs/sql/erp_logistics_company-data.sql` 仅用于单独覆盖导入，不参与初始化。
 
 ## 端口约定（仅监听本机 127.0.0.1）
 
