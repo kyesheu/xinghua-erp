@@ -60,8 +60,8 @@ AI 智能体为商家提供自然语言经营分析与人机协同的补货审�
 | Python 工作流 | `ai-service/app/workflows/`（management 并行分析、inventory_review 人机审核、product 文案、agent 对话与分析编排）；配置在 `app/core/config.py`、共享模型在 `app/schemas/`、规则在 `app/rules/` |
 | Python 工具定义 | `ai-service/app/tools/erp.py`（`query_erp`：13 类只读数据查询，经 HTTP 回调 Java） |
 | 工作流测试 | `ai-service/tests/`（Mock LLM 离线回归，不依赖付费模型） |
-| Java 只读资料服务 | `erp-backend/service/`（AiSalesReadService、AiFinanceReadService、AiInventoryReadService 等） |
-| Java 权限门禁与端点 | `erp-backend/erp-api/.../controller/ai/`（ManagementAgentController 等） |
+| Java 只读资料服务 | 按所属领域分布：`erp-order`（销售、营销、风险）、`erp-purchase`（采购草稿）、`erp-api`（财务、库存），统一在 `cn.xinghuaerp.ai.service` 包下 |
+| Java 权限门禁与端点 | `erp-backend/erp-api/src/main/java/cn/xinghuaerp/ai/controller/`（ManagementAgentController、ChatController 等） |
 | Java 工具网关 | `AiToolGateway`（`/internal/ai-tools/query`，白名单分发 13 类查询）+ `ToolToken`（短时令牌） |
 | Java 兜底 | `ChatService`（可读提示）、`AiAnalysisFallback`（本地数据摘要）、`AiBriefService#buildFallbackBrief`（固定文案简报） |
 | 前端页面 | `erp-frontend/src/views/ai/` |
@@ -70,7 +70,7 @@ AI 智能体为商家提供自然语言经营分析与人机协同的补货审�
 ## 模型配置
 
 - LLM 在「AI 智能 > 模型配置」页面配置（OpenAI 兼容接口），后端调用本服务时经请求头透传模型地址、密钥与模型名；
-  对话、深度分析、工作台简报与「测试连接」共用这一处配置，Java 侧不再构造任何模型客户端；
+  对话、深度分析、工作台简报与「测试连接」共用这一处配置，Java 侧只做透传，不构造模型客户端；
   页面未配置时回退到环境变量 `AI_MODEL_ENABLED`、`AI_MODEL_NAME`、`AI_MODEL_API_KEY`、`AI_MODEL_BASE_URL` 与 `config.local.json` 的 `model` 段
 - `AI_MODEL_ENABLED=false` 时任务规划与文案生成走纯规则路径，全部功能仍可验证，不依赖付费模型
 - 服务间调用使用 `ERP_AGENT_SECRET` 鉴权

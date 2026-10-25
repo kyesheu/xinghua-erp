@@ -33,18 +33,14 @@ MySQL 只在**数据卷为空**时执行初始化，脚本按容器内文件名�
 
 注意两点：
 
-- **一条 SQL 报错会导致其后的语句整段不执行**（mysql 客户端批量模式遇错即停）。历史上主 SQL 里
-  `sys_open_auth.app_key` 定义为 `varchar(25)` 而种子数据是 26 字符，导入在第 6865 行中断，
-  其后的 `sys_message`、`sys_user`、`sys_role`、`wms_*`、`ai_config` 等 23 张表全部没建出来，但容器依然"健康"。
-  该字段已改为 `varchar(64)`。
-- 因此健康检查不只 `SELECT 1`，还会校验 `sys_message`、`sys_user`、`ai_config`、`ai_inventory_review_task`
-  四张"最后才创建"的表是否齐全。若初始化失败，MySQL 容器会停在 `unhealthy`，`docker compose ps` 能直接看出来。
+- **一条 SQL 报错会导致其后的语句整段不执行**（mysql 客户端批量模式遇错即停）。修改初始化脚本后，确保每条语句都能执行成功，尤其注意字段长度与种子数据是否匹配。
+- 健康检查不只 `SELECT 1`，还会校验 `sys_message`、`sys_user`、`ai_config`、`ai_inventory_review_task` 四张位于脚本末尾的表是否齐全。若初始化失败，MySQL 容器会停在 `unhealthy`，`docker compose ps` 能直接看出来。
 
 排查初始化失败：
 
 ```bash
 docker logs xinghua-erp-mysql-1 2>&1 | grep -E "running /docker-entrypoint-initdb.d|ERROR"
-docker compose down -v && docker compose up -d   # 修好 SQL 后必须清卷重建，否则不会重新导入
+docker compose down -v && docker compose up -d   # 改过 SQL 必须清卷重建，否则不会重新导入
 ```
 
 物流公司基础数据（2373 条）已在主 SQL 内，`docs/sql/erp_logistics_company-data.sql` 仅用于单独覆盖导入，不参与初始化。

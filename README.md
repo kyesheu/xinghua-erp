@@ -1,4 +1,4 @@
-﻿# 电商 ERP 系统（多商户进销存平台）
+# 电商 ERP 系统（多商户进销存平台）
 
 面向多商户电商企业的进销存管理系统，对接淘宝、拼多多、抖音、京东、快手、微信视频号、小红书 7 个国内电商平台的开放接口，覆盖商品、订单、库存、采购、发货全链路，内置基于 LangGraph 的 AI 智能经营分析。
 
@@ -54,23 +54,24 @@
 
 ## 快速开始
 
-```bash
-# 1. 基础设施（MySQL/Redis/MinIO/RabbitMQ，在 docker/ 目录下执行）
-#    MySQL 首次启动会自动按序执行 docs/sql 下的 10 个初始化脚本（建表、基础数据、AI 权限），
-#    无需手工导库；等 docker compose ps 里 mysql 变成 healthy 再进行下一步
-cd docker && docker compose up -d && cd ..
+以下命令均在仓库根目录执行（括号包裹是为了切目录后自动回到根目录）。
 
-# 2. 启动后端（端口 6149）
+```bash
+# 1. 基础设施：MySQL / Redis / MinIO / RabbitMQ
+#    MySQL 首次启动会自动执行 docs/sql 下的 10 个初始化脚本，无需手工导库
+(cd docker && docker compose up -d)
+docker compose -f docker/docker-compose.yml ps     # 等 mysql 显示 healthy 再继续
+
+# 2. 后端（端口 6149）
 mvn -f erp-backend/pom.xml clean install
 java -jar erp-backend/erp-api/target/erp-api-4.1.0.jar
 
-# 3. 启动前端
-cd erp-frontend && npm install && npm run dev
+# 3. 前端（http://localhost:88）
+(cd erp-frontend && npm install && npm run dev)
 
-# 4. 启动 AI 服务（端口 8000，无需模型密钥即可运行）
-cd ai-service && python -m venv .venv
-.venv/Scripts/pip install -e .
-.venv/Scripts/uvicorn app.main:app --port 8000
+# 4. AI 服务（端口 8000，未配置模型也能运行）
+(cd ai-service && python -m venv .venv && .venv/Scripts/pip install -e .)
+(cd ai-service && .venv/Scripts/uvicorn app.main:app --port 8000)
 ```
 
 详细步骤与配置说明见 [部署指南](docs/部署指南.md)。
@@ -149,4 +150,4 @@ AI 服务的本地配置：复制 `ai-service/config.example.json` 为 `ai-servi
 `listing_rules` 等字段。模板里的 `REPLACE_ME` 只是占位符，必须替换为真实值，且
 `agent_secret` 长度需 ≥ 32 字符（不足时 AI 内部接口会直接返回 403）。`config.local.json` 已在 `.gitignore` 中排除，
 **不会被提交到仓库**；也不要把真实密钥写回 `config.example.json`（该文件仅作模板随仓库分发）。
-其中的 `model` 段已是兼容旧部署的回退项，页面配置生效时会被请求头里的参数覆盖。
+其中的 `model` 段仅作为页面未配置时的回退，页面配置生效时会被请求头里的参数覆盖。
