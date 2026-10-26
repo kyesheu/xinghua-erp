@@ -76,6 +76,8 @@ java -jar erp-backend/erp-api/target/erp-api-4.1.0.jar
 
 详细步骤与配置说明见 [部署指南](docs/部署指南.md)。
 
+初始化完成后用管理员账号登录：账号 `admin`，初始密码 `admin123`。正式部署后请立即在「个人中心」修改密码。
+
 ## 文档导航
 
 | 文档 | 内容 |

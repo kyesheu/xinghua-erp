@@ -7199,7 +7199,7 @@ CREATE TABLE `sys_user`  (
 -- ----------------------------
 -- Records of sys_user
 -- ----------------------------
-INSERT INTO `sys_user` VALUES (1, NULL, 'admin', '兴华数链', '00', 'xinghuaerp@qq.com', '15818590119', '0', '', '$2a$10$oP2xEXNEhjEdBSOCoxCtY.z5msd5dMgQCTd42SUFu0vNTipucGoMq', '0', '0', '127.0.0.1', '2026-07-15 15:00:22', 'admin', '2023-08-07 19:31:37', '', '2026-07-15 15:00:23', '管理员');
+INSERT INTO `sys_user` VALUES (1, NULL, 'admin', '兴华数链', '00', 'xinghuaerp@qq.com', '15818590119', '0', '', '$2a$10$3S1lU7LPTN0E5xaGZ1/N/.Bs6zZ9v88Hq1NcBuOWDh/bBtJmfy2di', '0', '0', '127.0.0.1', '2026-07-15 15:00:22', 'admin', '2023-08-07 19:31:37', '', '2026-07-15 15:00:23', '管理员');
 
 -- ----------------------------
 -- Table structure for sys_user_role
