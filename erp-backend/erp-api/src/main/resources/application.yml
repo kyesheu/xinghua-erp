@@ -114,6 +114,12 @@ minio:
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket: ${MINIO_BUCKET:xinghua-erp}
+  # 上传分类 -> 对象前缀。新增分类只改这里，前端传左侧的分类编码即可。
+  # 对象最终路径：{前缀}/{yyyy-MM}/{uuid}.{ext}
+  categories:
+    goods: goods
+    supplier-license: supplier/license
+    avatar: user/avatar
 
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*Mapper.xml

@@ -41,7 +41,7 @@ import { getToken } from '@/utils/auth'
 import { isExternal } from '@/utils/validate'
 
 const props = withDefaults(defineProps<{
-  category: 'supplier-license' | 'avatar' | 'goods'
+  category: string
   modelValue?: string | any[] | string
   limit?: number
   fileSize?: number

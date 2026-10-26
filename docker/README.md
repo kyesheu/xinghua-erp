@@ -45,6 +45,21 @@ docker compose down -v && docker compose up -d   # 改过 SQL 必须清卷重建
 
 物流公司基础数据（2373 条）已在主 SQL 内，`docs/sql/erp_logistics_company-data.sql` 仅用于单独覆盖导入，不参与初始化。
 
+### 已有数据卷不会重跑脚本
+
+初始化脚本只对空数据卷生效。表结构或 MinIO 策略改过之后，老环境要手动补一次：
+
+```sql
+-- 例：sys_oss 新增业务分类与文件大小
+ALTER TABLE sys_oss
+  ADD COLUMN category varchar(50) DEFAULT '' COMMENT '业务分类' AFTER bucket,
+  ADD COLUMN file_size bigint DEFAULT 0 COMMENT '文件大小（字节）' AFTER category;
+```
+
+```bash
+docker compose up -d --force-recreate minio-init   # 重新应用存储桶匿名读策略
+```
+
 ## 端口约定（仅监听本机 127.0.0.1）
 
 | 服务 | 宿主端口 | 容器端口 |

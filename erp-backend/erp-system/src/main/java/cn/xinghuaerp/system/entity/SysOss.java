@@ -50,6 +50,16 @@ public class SysOss implements Serializable {
     private String bucket;
 
     /**
+     * 业务分类（对应 minio.categories 的配置键，如 goods、supplier-license）
+     */
+    private String category;
+
+    /**
+     * 文件大小（字节）
+     */
+    private Long fileSize;
+
+    /**
      * 显示顺序
      */
     private Integer orderNum;

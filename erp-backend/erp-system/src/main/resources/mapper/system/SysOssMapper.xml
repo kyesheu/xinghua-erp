@@ -12,6 +12,8 @@
             <result property="url" column="url" jdbcType="VARCHAR"/>
             <result property="objectName" column="object_name" jdbcType="VARCHAR"/>
             <result property="bucket" column="bucket" jdbcType="VARCHAR"/>
+            <result property="category" column="category" jdbcType="VARCHAR"/>
+            <result property="fileSize" column="file_size" jdbcType="BIGINT"/>
             <result property="orderNum" column="order_num" jdbcType="INTEGER"/>
             <result property="status" column="status" jdbcType="CHAR"/>
             <result property="delFlag" column="del_flag" jdbcType="CHAR"/>
@@ -24,7 +26,7 @@
     <sql id="Base_Column_List">
         oss_id,file_name,original_name,
         file_suffix,url,object_name,
-        bucket,order_num,status,
+        bucket,category,file_size,order_num,status,
         del_flag,create_by,create_time,
         update_by,update_time
     </sql>
