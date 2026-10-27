@@ -78,6 +78,7 @@ import { listMerchant } from '@/api/shop/merchant'
 import { pushToCloudWarehouse } from '@/api/shipping/shipOrder'
 import { listCloudWarehouse } from '@/api/wms/warehouse'
 import { parseTime } from '@/utils/zhijian'
+import { loadShopOptions } from '@/utils/shopQuery'
 import Pagination from '@/components/Pagination/index.vue'
 import RightToolbar from '@/components/RightToolbar/index.vue'
 import ImagePreview from '@/components/ImagePreview/index.vue'
@@ -115,11 +116,13 @@ function handlePushCloud(){
 }
 
 onMounted(()=>{
-  listMerchant({pageNum:1,pageSize:1000}).then((resp:any)=>{
-    merchantList.value=resp.rows||[]
-    if(merchantList.value.length>0)queryParams.merchantId=merchantList.value[0].id
-    if(resp.rows?.length===1&&resp.rows[0].id>0)isMerchant.value=true
-    listShop({merchantId:queryParams.merchantId}).then((res:any)=>{shopList.value=res.rows||[];getList()})
-  })
+  // 本页查询条件里没有平台字段，首屏不带 merchantId / shopId，范围交给后端 scope，详见 utils/shopQuery
+  listMerchant({pageNum:1,pageSize:1000})
+    .then((resp:any)=>{merchantList.value=resp.rows||[]})
+    .catch(()=>{merchantList.value=[]})
+  loadShopOptions(listShop)
+    .then((shops:any[])=>{shopList.value=shops})
+    .catch(()=>{shopList.value=[];ElMessage.error('店铺列表加载失败')})
+    .finally(()=>{getList()})
 })
 </script>

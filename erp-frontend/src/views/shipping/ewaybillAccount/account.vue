@@ -167,6 +167,7 @@ import { listMerchant } from '@/api/shop/merchant'
 import { listLogisticsStatus } from '@/api/shipping/logisticsLibrary'
 import { listSupplier, listAllSupplier } from '@/api/goods/supplier'
 import { listWarehouse } from '@/api/wms/warehouse'
+import { getDefaultShopQuery, loadShopOptions } from '@/utils/shopQuery'
 import {
   getWaybillAccountList,
   getWaybillTemplateList,
@@ -356,31 +357,23 @@ function cancel() {
 }
 
 onMounted(() => {
-  queryParams.shopType = props.shopType
-  listPlatform({ status: 0 }).then((res: any) => {
-    typeList.value = res.rows || []
-  })
-  listLogisticsStatus({ shopType: props.shopType, status: 1 }).then((res: any) => {
-    logisticsList.value = res.rows || []
-  })
-  listMerchant({ pageNum: 1, pageSize: 1000 }).then((resp: any) => {
-    merchantList.value = resp.rows || []
-    if (merchantList.value.length > 0) {
-      queryParams.merchantId = merchantList.value[0].id
-    }
-    if (resp.rows && resp.rows.length === 1 && resp.rows[0].id > 0) {
-      isMerchant.value = true
-    }
-    listShop({ merchantId: queryParams.merchantId, type: props.shopType }).then((res: any) => {
-      shopList.value = res.rows || []
-      if (shopList.value.length > 0) {
-        queryParams.shopId = shopList.value[0].id
-      }
-      getList()
-    })
-  })
+  // 首屏只按平台过滤，商户 / 店铺留空交给后端 scope 决定，详见 utils/shopQuery
+  Object.assign(queryParams, getDefaultShopQuery(props.shopType))
+  listPlatform({ status: 0 })
+    .then((res: any) => { typeList.value = res.rows || [] })
+    .catch(() => { typeList.value = [] })
+  listLogisticsStatus({ shopType: props.shopType, status: 1 })
+    .then((res: any) => { logisticsList.value = res.rows || [] })
+    .catch(() => { logisticsList.value = [] })
+  listMerchant({ pageNum: 1, pageSize: 1000 })
+    .then((resp: any) => { merchantList.value = resp.rows || [] })
+    .catch(() => { merchantList.value = [] })
+  loadShopOptions(listShop, { shopType: props.shopType })
+    .then((shops: any[]) => { shopList.value = shops })
+    .catch(() => { shopList.value = []; ElMessage.error('店铺列表加载失败') })
+    .finally(() => { getList() })
   listSupplier({ pageNum: 1, pageSize: 100 }).then((res: any) => {
     // supplierList.value = res.rows || []
-  })
+  }).catch(() => {})
 })
 </script>

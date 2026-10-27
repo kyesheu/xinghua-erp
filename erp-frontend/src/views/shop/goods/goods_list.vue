@@ -191,6 +191,7 @@ import { listShop } from '@/api/shop/shop'
 import { listMerchant } from '@/api/shop/merchant'
 import { listGoods, pullGoodsList, delGoods, updateGoods, insertShopGoodsSku } from '@/api/shop/goods'
 import { parseTime, amountFormatter } from '@/utils/zhijian'
+import { getDefaultShopQuery, loadShopOptions } from '@/utils/shopQuery'
 import Pagination from '@/components/Pagination/index.vue'
 import RightToolbar from '@/components/RightToolbar/index.vue'
 import ImagePreview from '@/components/ImagePreview/index.vue'
@@ -321,19 +322,14 @@ onMounted(() => {
     })
     return
   }
-  listMerchant({}).then((resp: any) => {
-    merchantList.value = resp.rows || []
-    // 后端 MerchantController.list() 会在列表头部固定插入一条虚拟商户「总部自营」(id=0)，
-    // 它名下没有任何真实店铺，当作筛选条件会查出 0 条，必须跳过。
-    const realMerchants = merchantList.value.filter((m: any) => m.id > 0)
-    // 只有唯一真实商户时（商户/店铺账号视角）才锁定商户；
-    // 总部视角下有多个商户，不锁商户，按平台看全量，避免把首屏锁死在单一商户/单一店铺。
-    if (realMerchants.length === 1) queryParams.merchantId = realMerchants[0].id
-    listShop({ merchantId: queryParams.merchantId, type: queryParams.shopType }).then((res: any) => {
-      shopList.value = res.rows || []
-      if (queryParams.merchantId && shopList.value.length > 0) queryParams.shopId = shopList.value[0].id
-      getList()
-    })
-  })
+  // 首屏只按平台过滤，商户 / 店铺留空交给后端 scope 决定，详见 utils/shopQuery
+  Object.assign(queryParams, getDefaultShopQuery(queryParams.shopType))
+  listMerchant({})
+    .then((resp: any) => { merchantList.value = resp.rows || [] })
+    .catch(() => { merchantList.value = [] })
+  loadShopOptions(listShop, { shopType: queryParams.shopType })
+    .then((shops: any[]) => { shopList.value = shops })
+    .catch(() => { shopList.value = []; ElMessage.error('店铺列表加载失败') })
+    .finally(() => { getList() })
 })
 </script>

@@ -143,6 +143,7 @@ import { listShop } from '@/api/shop/shop'
 import { listMerchant } from '@/api/shop/merchant'
 import { listShopRefund, pullRefund, pullRefundDetail } from '@/api/shop/refund'
 import { parseTime, amountFormatter } from '@/utils/zhijian'
+import { loadShopOptions } from '@/utils/shopQuery'
 import LocalAfterSaleDialog from '@/components/LocalAfterSaleDialog/index.vue'
 import Pagination from '@/components/Pagination/index.vue'
 import RightToolbar from '@/components/RightToolbar/index.vue'
@@ -212,17 +213,13 @@ function handlePullDetail(row: any) {
 function handleRefundProcessing(row: any) { localDialog.value?.open(row.afterId) }
 
 onMounted(() => {
-  listMerchant({}).then((resp: any) => {
-    merchantList.value = resp.rows || []
-    // 后端 MerchantController.list() 会在列表头部固定插入一条虚拟商户「总部自营」(id=0)，
-    // 当作筛选条件会查出 0 条，必须跳过；总部视角不锁商户，按平台看全量。
-    const realMerchants = merchantList.value.filter((m: any) => m.id > 0)
-    if (realMerchants.length === 1) queryParams.merchantId = realMerchants[0].id
-    listShop({ merchantId: queryParams.merchantId, type: props.shopType }).then((res: any) => {
-      shopList.value = res.rows || []
-      if (queryParams.merchantId && shopList.value.length > 0) queryParams.shopId = shopList.value[0].id
-      getList()
-    })
-  })
+  // 本页的 shopType 由 getList() 统一附加，商户 / 店铺首屏留空交给后端 scope，详见 utils/shopQuery
+  listMerchant({})
+    .then((resp: any) => { merchantList.value = resp.rows || [] })
+    .catch(() => { merchantList.value = [] })
+  loadShopOptions(listShop, { shopType: props.shopType })
+    .then((shops: any[]) => { shopList.value = shops })
+    .catch(() => { shopList.value = []; ElMessage.error('店铺列表加载失败') })
+    .finally(() => { getList() })
 })
 </script>

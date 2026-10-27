@@ -326,6 +326,7 @@ import { Search, Refresh, DocumentCopy } from '@element-plus/icons-vue'
 import { listOrder, getOrder } from '@/api/order/order'
 import { listPlatform, listShop } from '@/api/shop/shop'
 import { listMerchant } from '@/api/shop/merchant'
+import { loadShopOptions } from '@/utils/shopQuery'
 import { getUserProfile } from '@/api/system/user'
 import { parseTime } from '@/utils/zhijian'
 import Pagination from '@/components/Pagination/index.vue'
@@ -501,19 +502,20 @@ onMounted(() => {
       // 总部
       isMerchant.value = false
       isShop.value = false
-      listMerchant({ pageNum: 1, pageSize: 1000 }).then((resp: any) => {
-        merchantList.value = resp.rows || []
-        if (route.query.merchantId === '0' && !merchantList.value.some((merchant: any) => Number(merchant.id) === 0)) {
-          merchantList.value.unshift({ id: 0, name: '总部' })
-        }
-        if (merchantList.value.length > 0) {
-          queryParams.merchantId = merchantList.value[0].id
-        }
-        listShop({ merchantId: queryParams.merchantId }).then((response: any) => {
-          shopList.value = response.rows || []
-          getList()
+      // 首屏不预设商户 / 店铺，范围交给后端 scope，详见 utils/shopQuery
+      listMerchant({ pageNum: 1, pageSize: 1000 })
+        .then((resp: any) => {
+          merchantList.value = resp.rows || []
+          // 工作台带 merchantId=0 进来时补一条"总部"用于展示，它只进下拉、不进查询条件
+          if (route.query.merchantId === '0' && !merchantList.value.some((merchant: any) => Number(merchant.id) === 0)) {
+            merchantList.value.unshift({ id: 0, name: '总部' })
+          }
         })
-      })
+        .catch(() => { merchantList.value = [] })
+      loadShopOptions(listShop, { shopType: queryParams.shopType })
+        .then((shops: any[]) => { shopList.value = shops })
+        .catch(() => { shopList.value = []; ElMessage.error('店铺列表加载失败') })
+        .finally(() => { getList() })
     } else if (user?.userType === 20) {
       // 商户
       isMerchant.value = true

@@ -127,6 +127,7 @@ import { listShop, listPlatform } from '@/api/shop/shop'
 import { listMerchant } from '@/api/shop/merchant'
 import { listGoodsSku, updateGoodsSku, delGoodsSku } from '@/api/shop/goods'
 import { amountFormatter } from '@/utils/zhijian'
+import { getDefaultShopQuery, loadShopOptions } from '@/utils/shopQuery'
 import Pagination from '@/components/Pagination/index.vue'
 import RightToolbar from '@/components/RightToolbar/index.vue'
 import ImagePreview from '@/components/ImagePreview/index.vue'
@@ -198,15 +199,17 @@ function cancel() { open.value = false }
 
 onMounted(() => {
   if (props.shopType && props.shopType > 0) queryParams.shopType = props.shopType
-  listPlatform({ status: 0 }).then((res: any) => { platformList.value = res.rows || [] })
-  listMerchant({}).then((resp: any) => {
-    merchantList.value = resp.rows || []
-    if (merchantList.value.length > 0) queryParams.merchantId = merchantList.value[0].id
-    listShop({ merchantId: queryParams.merchantId, type: queryParams.shopType }).then((res: any) => {
-      shopList.value = res.rows || []
-      if (shopList.value.length > 0) queryParams.shopId = shopList.value[0].id
-      getList()
-    })
-  })
+  // 首屏只按平台过滤，商户 / 店铺留空交给后端 scope 决定，详见 utils/shopQuery
+  Object.assign(queryParams, getDefaultShopQuery(queryParams.shopType))
+  listPlatform({ status: 0 })
+    .then((res: any) => { platformList.value = res.rows || [] })
+    .catch(() => { platformList.value = [] })
+  listMerchant({})
+    .then((resp: any) => { merchantList.value = resp.rows || [] })
+    .catch(() => { merchantList.value = [] })
+  loadShopOptions(listShop, { shopType: queryParams.shopType })
+    .then((shops: any[]) => { shopList.value = shops })
+    .catch(() => { shopList.value = []; ElMessage.error('店铺列表加载失败') })
+    .finally(() => { getList() })
 })
 </script>

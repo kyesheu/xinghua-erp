@@ -267,6 +267,7 @@ import { listShop, getShop } from '@/api/shop/shop'
 import { listMerchant } from '@/api/shop/merchant'
 import { listShopOrder, pullOrder, pullOrderDetail, orderPushOms } from '@/api/shop/order'
 import { getUserProfile } from '@/api/system/user'
+import { getDefaultShopQuery } from '@/utils/shopQuery'
 import { parseTime } from '@/utils/zhijian'
 import Pagination from '@/components/Pagination/index.vue'
 import RightToolbar from '@/components/RightToolbar/index.vue'
@@ -459,13 +460,12 @@ onMounted(() => {
     if (user.userType === 0) {
       // 总部
       isMerchant.value = false
-      listMerchant({}).then((resp: any) => {
-        merchantList.value = resp.rows || []
-        if (merchantList.value.length > 0) {
-          queryParams.merchantId = props.merchantId || merchantList.value[0].id
-        }
-        loadShops()
-      })
+      listMerchant({})
+        .then((resp: any) => { merchantList.value = resp.rows || [] })
+        .catch(() => { merchantList.value = [] })
+      // props.merchantId 有明确来源时优先；兜底不再取 merchantList[0]（那条可能是 id=0 的虚拟总部）
+      queryParams.merchantId = getDefaultShopQuery(props.shopType, props.merchantId).merchantId ?? null
+      loadShops()
     } else if (user.userType === 20) {
       // 商户
       isMerchant.value = true
