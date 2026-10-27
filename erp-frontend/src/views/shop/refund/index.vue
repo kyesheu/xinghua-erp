@@ -214,10 +214,13 @@ function handleRefundProcessing(row: any) { localDialog.value?.open(row.afterId)
 onMounted(() => {
   listMerchant({}).then((resp: any) => {
     merchantList.value = resp.rows || []
-    if (merchantList.value.length > 0) queryParams.merchantId = merchantList.value[0].id
+    // 后端 MerchantController.list() 会在列表头部固定插入一条虚拟商户「总部自营」(id=0)，
+    // 当作筛选条件会查出 0 条，必须跳过；总部视角不锁商户，按平台看全量。
+    const realMerchants = merchantList.value.filter((m: any) => m.id > 0)
+    if (realMerchants.length === 1) queryParams.merchantId = realMerchants[0].id
     listShop({ merchantId: queryParams.merchantId, type: props.shopType }).then((res: any) => {
       shopList.value = res.rows || []
-      if (shopList.value.length > 0) queryParams.shopId = shopList.value[0].id
+      if (queryParams.merchantId && shopList.value.length > 0) queryParams.shopId = shopList.value[0].id
       getList()
     })
   })
