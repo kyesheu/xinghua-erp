@@ -163,7 +163,8 @@ emit("SET FOREIGN_KEY_CHECKS=0;")
 for t in ["erp_supplier_goods_price", "erp_supplier_product_item", "erp_supplier_product",
           "oms_shop_goods_sku", "oms_shop_goods", "erp_purchase_logistics",
           "oms_shop_refund", "oms_shop_order_item", "oms_shop_order",
-          "o_order_stocking_item", "o_order_stocking"]:
+          "o_order_stocking_item", "o_order_stocking",
+          "oms_shop_waybill_account"]:
     emit("DELETE FROM %s;" % t)
 
 # ================================================================ 1. 供应商产品
@@ -1010,6 +1011,28 @@ insert("o_order_stocking_item",
         "warehouse_type", "warehouse_id", "warehouse_name", "unshipped_quantity", "barcode",
         "warehouse_goods_id"], stocking_items)
 
+# ================================================================ 8. 电子面单账户
+# 注意：实体 ShopWaybillAccount.templateId 是 Long，template_id 列虽是 varchar(55) 也必须存数字
+waybill_accounts = [
+    (1, 'CN-WB_TB-SH001-100', 'CN100', '菜鸟上海转运中心', 'WB_TB', 'CN', 'CAINIAO_STD', 1001, '菜鸟标准快件', 'DIRECT', 'XH-CN-2026001', 'src-cn-100', '上海市', '上海市', '青浦区华新镇嘉松中路 1688 号', '青浦区', 2600, '青浦区华新镇嘉松中路 1688 号菜鸟产业园', 310000, '上海市', 310118, '青浦区', 0, '全镇', 310000, '上海市', 0, 'CN-SH-001', '上海青浦网点', 1, 'CAINIAO', 9001, '菜鸟网络科技有限公司', 1, 0, '华新镇', '王雅琳', '13705710001', '021-56001001', 'https://oss.example.com/waybill/cn-std-v3.pdf', 1, 100, 1, 'PT', 'CN-LOG-100', 1, 310101),
+    (2, 'JD-WB_JD_ALPHA-BJ001-200', 'JD200', '京东北京通州仓配中心', 'WB_JD_ALPHA', 'JD', 'JD_STD', 2001, '京东标准快递', 'DIRECT', 'XH-JD-2026002', 'src-jd-200', '北京市', '北京市', '通州区马驹桥镇物流基地兴贸三街 12 号', '通州区', 1800, '通州区马驹桥镇兴贸三街 12 号京东物流园', 110000, '北京市', 110112, '通州区', 0, '马驹桥镇', 110000, '北京市', 0, 'JD-BJ-001', '北京通州分拣中心', 1, 'JDWL', 9002, '京东物流', 1, 0, '马驹桥镇', '李成钢', '13800138002', '010-56002002', 'https://oss.example.com/waybill/jd-std-v2.pdf', 2, 200, 1, 'PT', 'JD-LOG-200', 1, 310102),
+    (3, 'PDD-WB_PDD-ZS001-300', 'PD300', '拼多多浙江金华分拨中心', 'WB_PDD', 'PDD', 'PDD_STD', 3001, '拼多多标准件', 'JOIN', 'XH-PDD-2026003', 'src-pdd-300', '浙江省', '金华市', '义乌市北苑街道雪峰西路 968 号', '义乌市', 1500, '义乌市北苑街道雪峰西路 968 号电商分拨园', 330700, '金华市', 330782, '义乌市', 0, '北苑街道', 330000, '浙江省', 0, 'PDD-JH-001', '金华义乌分拨点', 1, 'PDDLOG', 9003, '拼多多电子面单服务', 1, 0, '北苑街道', '陈慧敏', '13905790003', '0579-56003003', 'https://oss.example.com/waybill/pdd-std-v1.pdf', 3, 300, 2, 'PT', 'PDD-LOG-300', 1, 310103),
+    (4, 'DY-WB_DY-GZ001-400', 'DY400', '抖音广州白云云打印中心', 'WB_DY', 'DY', 'DY_STD', 4001, '抖音标准快递', 'DIRECT', 'XH-DY-2026004', 'src-dy-400', '广东省', '广州市', '白云区太和镇大源路 66 号', '白云区', 2000, '白云区太和镇大源路 66 号抖音电商仓', 440100, '广州市', 440111, '白云区', 0, '太和镇', 440000, '广东省', 0, 'DY-GZ-001', '广州白云云打印点', 1, 'DYEWB', 9004, '抖音电子面单', 1, 0, '太和镇', '林志强', '13609790004', '020-56004004', 'https://oss.example.com/waybill/dy-std-v1.pdf', 4, 400, 2, 'PT', 'DY-LOG-400', 1, 310104),
+    (5, 'KS-WB_KS-SH002-600', 'KS600', '快手上海奉贤云打印中心', 'WB_KS', 'KS', 'KS_STD', 5001, '快手标准快递', 'JOIN', 'XH-KS-2026005', 'src-ks-600', '上海市', '上海市', '奉贤区金汇镇大叶公路 6999 号', '奉贤区', 1200, '奉贤区金汇镇大叶公路 6999 号快手仓', 310120, '奉贤区', 0, '奉贤区', 0, '金汇镇', 310000, '上海市', 0, 'KS-SH-002', '上海奉贤云打印点', 1, 'KSEWB', 9005, '快手电子面单', 1, 0, '金汇镇', '赵天宇', '13701890005', '021-56005005', 'https://oss.example.com/waybill/ks-std-v1.pdf', 5, 600, 3, 'PT', 'KS-LOG-600', 1, 310105),
+    (6, 'WX-WB_WX_VS-SH003-500', 'WX500', '微信视频号云打印中心', 'WB_WX_VS', 'WX', 'WX_VS_STD', 5002, '微信小店标准快递', 'DIRECT', 'XH-WX-2026006', 'src-wx-500', '上海市', '上海市', '闵行区莘庄镇七莘路 1366 号', '闵行区', 900, '闵行区莘庄镇七莘路 1366 号万象城 B 座', 310112, '闵行区', 0, '莘庄镇', 0, '莘庄镇', 310000, '上海市', 0, 'WX-SH-003', '上海莘庄打印点', 1, 'WXEWB', 9006, '微信小店电子面单', 1, 0, '莘庄镇', '周雨桐', '13917890006', '021-56006006', 'https://oss.example.com/waybill/wx-vs-v1.pdf', 6, 500, 3, 'PT', 'WX-LOG-500', 1, 310106),
+]
+WAYBILL_COLS = ["id", "key1", "code", "name", "waybill_platform_type", "brand_code",
+    "ref_logistics_code", "ref_logistics_id", "ref_logistics_name", "ref_logistics_type",
+    "settle_account", "source_key", "province", "city", "detail", "district", "num",
+    "address_address", "city_id", "city_name", "country_id", "country_name",
+    "countryside_id", "countryside_name", "province_id", "province_name", "amount",
+    "branch_code", "branch_name", "operation_type", "provider_code", "provider_id",
+    "provider_name", "provider_type", "support_cod", "town", "deliver_name",
+    "deliver_mobile", "deliver_phone", "template_url", "shop_id", "shop_type",
+    "merchant_id", "type", "outer_logistics_id", "support_offline", "template_id"]
+insert("oms_shop_waybill_account", WAYBILL_COLS,
+       [dict(zip(WAYBILL_COLS, row)) for row in waybill_accounts])
+
 # ---------------------------------------------------------------- 输出
 with open(OUT_PATH, "w", encoding="utf-8") as f:
     f.write("\n".join(out))
@@ -1027,3 +1050,4 @@ print("oms_shop_order_item       : %d" % len(order_items))
 print("oms_shop_refund           : %d" % len(refund_rows))
 print("o_order_stocking          : %d" % len(stocking))
 print("o_order_stocking_item     : %d" % len(stocking_items))
+print("oms_shop_waybill_account  : %d" % len(waybill_accounts))
