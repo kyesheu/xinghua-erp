@@ -25,6 +25,7 @@ public class OrderOutboxDispatcher {
     @Scheduled(fixedDelayString = "${erp.mq.outbox-delay-ms:5000}")
     public void dispatch() {
         for (int i = 0; i < 20; i++) {
+            if (Thread.currentThread().isInterrupted()) break;
             Boolean sent = new TransactionTemplate(transactionManager).execute(status -> {
                 var rows = jdbc.queryForList("SELECT message_id, payload FROM order_event_outbox WHERE sent_at IS NULL AND next_attempt_at <= CURRENT_TIMESTAMP ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED");
                 if (rows.isEmpty()) return false;
@@ -45,6 +46,7 @@ public class OrderOutboxDispatcher {
                     if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                     jdbc.update("UPDATE order_event_outbox SET attempts=attempts+1, next_attempt_at=DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 SECOND) WHERE message_id=?", id);
                     log.warn("订单事件投递失败，保留待重试：messageId={}", id, e);
+                    if (Thread.currentThread().isInterrupted()) return false;
                 }
                 return true;
             });

@@ -40,4 +40,21 @@ class OrderOutboxDispatcherTest {
     @Test void confirmedMessageMarkedSent() { exercise(true,false); }
     @Test void brokerNackRetainsEventForRetry() { exercise(false,false); }
     @Test void unroutableMessageRetainsEventEvenWhenAcked() { exercise(true,true); }
+    @Test void interruptPreservesRetryAndStopsTheBatch() {
+        var jdbc = mock(JdbcTemplate.class);
+        var rabbit = mock(RabbitTemplate.class);
+        var tm = mock(PlatformTransactionManager.class);
+        when(tm.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        when(jdbc.queryForList(anyString())).thenReturn(List.of(Map.of("message_id",(Object) "interrupted", "payload","{}")));
+        doAnswer(invocation -> { Thread.currentThread().interrupt(); return null; })
+                .when(rabbit).convertAndSend(anyString(),anyString(),any(Object.class),any(MessagePostProcessor.class),any(CorrelationData.class));
+        try {
+            new OrderOutboxDispatcher(jdbc,rabbit,tm).dispatch();
+            org.junit.jupiter.api.Assertions.assertTrue(Thread.currentThread().isInterrupted());
+            verify(jdbc,times(1)).queryForList(anyString());
+            verify(jdbc).update(contains("attempts=attempts+1"),eq("interrupted"));
+            verify(jdbc,never()).update(contains("SET sent_at="),any(Object.class));
+            verify(tm).commit(any());
+        } finally { Thread.interrupted(); }
+    }
 }

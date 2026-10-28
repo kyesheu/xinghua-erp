@@ -11,7 +11,7 @@ import cn.xinghuaerp.common.ResultVo;
 import cn.xinghuaerp.common.ResultVoEnum;
 import cn.xinghuaerp.enums.EnumOOrderStatus;
 import cn.xinghuaerp.enums.EnumShopType;
-import cn.xinghuaerp.sse.SseService;
+import org.springframework.context.ApplicationEventPublisher;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,7 +40,7 @@ public class ErpOrderMessageService {
     private final OOrderItemMapper orderItemMapper;
     private final InventoryFacade shipOrderMapper;
     private final InventoryFacade shipOrderItemMapper;
-    private final SseService sseService;
+    private final ApplicationEventPublisher applicationEvents;
     @Transactional(rollbackFor = Exception.class)
     public ResultVo<Long> erpOrderMessage(String orderNum) {
         log.info("erp订单消息处理" + orderNum);
@@ -110,8 +110,6 @@ public class ErpOrderMessageService {
             insert.setSalesmanName(originOrder.getSalesmanName());
 
             orderMapper.insert(insert);
-            // 发送新订单消息
-            sseService.broadcastNewOrderMessage(EnumShopType.ERP_ORDER,insert.getOrderNum());
             // 插入orderItem
             addOfflineOrderItem(insert.getId(), originOrder.getOrderNum(),insert.getOrderTime(), originOrder.getOrderStatus(), originOrder.getRefundStatus());
 
@@ -122,6 +120,8 @@ public class ErpOrderMessageService {
             offlineUpdate.setUpdateTime(LocalDateTime.now());
             offlineUpdate.setUpdateBy("推送状态更新");
             erpSalesOrderMapper.updateById(offlineUpdate);
+            applicationEvents.publishEvent(new cn.xinghuaerp.order.mq.OrderCommittedNotification(
+                    EnumShopType.ERP_ORDER, insert.getOrderNum()));
         } else {
             // 修改订单 (修改：)
             OOrder update = new OOrder();

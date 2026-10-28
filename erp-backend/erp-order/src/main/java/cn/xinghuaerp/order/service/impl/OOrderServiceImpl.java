@@ -26,7 +26,7 @@ import cn.xinghuaerp.product.facade.ShopGoodsSkuFacade;
 import cn.xinghuaerp.order.service.ShopOrderService;
 import cn.xinghuaerp.order.request.OrderSearchRequest;
 
-import cn.xinghuaerp.sse.SseService;
+import org.springframework.context.ApplicationEventPublisher;
 import cn.xinghuaerp.utils.DateUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -74,7 +74,7 @@ import cn.xinghuaerp.enums.EnumWarehouseType;
 @Service
 public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
     implements OOrderService {
-    private final SseService sseService;
+    private final ApplicationEventPublisher applicationEvents;
     private final InventoryFacade warehouseMapper;
     private final ShopOrderService shopOrderService;
     private final ShopOrderItemMapper shopOrderItemMapper;
@@ -180,11 +180,11 @@ public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
                 insert.setSalesmanId(shopOrder.getFinderId());
                 insert.setSalesmanName(shopOrder.getLiveId());
                 orderMapper.insert(insert);
-                // 发送新订单消息
-                sseService.broadcastNewOrderMessage(EnumShopType.getByIndex(insert.getShopType()),insert.getOrderNum());
                 // 插入orderItem
                 addShopOrderItem(insert, shopOrder);
                 if (orderEventPublisher != null) orderEventPublisher.publishOrderCreated(shopOrderId, Long.valueOf(insert.getId()));
+                applicationEvents.publishEvent(new cn.xinghuaerp.order.mq.OrderCommittedNotification(
+                        EnumShopType.getByIndex(insert.getShopType()), insert.getOrderNum()));
                 return ResultVo.success(Long.valueOf(insert.getId()));
 
             }else{
