@@ -7479,6 +7479,8 @@ CREATE TABLE `ai_config` (
 -- ----------------------------
 DROP TABLE IF EXISTS `sys_message`;
 CREATE TABLE `sys_message` (
+  `dedup_key` varchar(100) DEFAULT NULL,
+  UNIQUE KEY `uk_message_dedup` (`dedup_key`),
   `id` bigint NOT NULL AUTO_INCREMENT,
   `type` varchar(50) NOT NULL COMMENT '消息类型：sales_zero-销售额为零, ship_pending-发货积压, refund_excess-退款过多, stock_low-库存不足, order_timeout-发货超时, ai_analysis-AI分析',
   `level` varchar(10) NOT NULL COMMENT '级别：high/medium/low',
@@ -7513,3 +7515,15 @@ CREATE TABLE `sys_alert_channel` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='外部通知渠道配置表';
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE IF NOT EXISTS order_event_outbox (
+ message_id varchar(36) NOT NULL PRIMARY KEY,
+ order_id bigint NOT NULL,
+ payload text NOT NULL,
+ created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ sent_at datetime NULL,
+ attempts int NOT NULL DEFAULT 0,
+ next_attempt_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE KEY uk_order_created (order_id),
+ KEY idx_outbox_pending (sent_at, next_attempt_at, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

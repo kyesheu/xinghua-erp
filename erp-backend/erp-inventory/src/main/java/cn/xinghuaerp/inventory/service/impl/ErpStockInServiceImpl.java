@@ -33,8 +33,8 @@ import java.util.stream.Collectors;
 
 import cn.xinghuaerp.inventory.service.OGoodsInventoryBatchService;
 import cn.xinghuaerp.inventory.service.OGoodsInventoryService;
-import cn.xinghuaerp.product.service.OGoodsService;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
+import cn.xinghuaerp.product.facade.OGoodsFacade;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
 import cn.xinghuaerp.inventory.service.ErpStockInItemService;
 import cn.xinghuaerp.inventory.service.ErpStockInService;
 import cn.xinghuaerp.inventory.service.ErpWarehouseService;
@@ -53,8 +53,8 @@ public class ErpStockInServiceImpl extends ServiceImpl<ErpStockInMapper, ErpStoc
     implements ErpStockInService {
     private final ErpStockInMapper mapper;
     private final ErpStockInItemService inItemService;
-    private final OGoodsSkuService skuService;
-    private final OGoodsService goodsService;
+    private final OGoodsSkuFacade skuService;
+    private final OGoodsFacade goodsService;
     private final ErpWarehouseService warehouseService;
     private final OGoodsInventoryService oGoodsInventoryService;
     private final OGoodsInventoryBatchService oGoodsInventoryBatchService;

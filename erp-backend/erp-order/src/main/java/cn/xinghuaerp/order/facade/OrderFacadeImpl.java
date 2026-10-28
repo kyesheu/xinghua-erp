@@ -41,4 +41,6 @@ public class OrderFacadeImpl implements OrderFacade {
     @Override public java.util.List<ShopOrder> listShopOrder(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrder> wrapper) { return shopOrderMapper.selectList(wrapper); }
     @Override public ShopOrder getShopOrderOne(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrder> wrapper) { return shopOrderMapper.selectOne(wrapper); }
     @Override public int updateShopOrder(ShopOrder entity) { return shopOrderMapper.updateById(entity); }
+    @Override public OOrder getOOrderById(java.io.Serializable id) { return oOrderMapper.selectById(id); }
+    @Override public com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrder> pageOOrder(com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrder> page, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrder> wrapper) { return oOrderMapper.selectPage(page, wrapper); }
 }

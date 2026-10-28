@@ -43,39 +43,19 @@ public class OGoodsInventoryServiceImpl
 
     @Override
     public boolean deductStock(Long inventoryId, Integer quantity) {
-        OGoodsInventory inv = this.getById(inventoryId);
-        if (inv == null || inv.getQuantity() < quantity) return false;
-
-        OGoodsInventory update = new OGoodsInventory();
-        update.setId(inventoryId);
-        update.setQuantity(inv.getQuantity() - quantity);
-        update.setAvailableQuantity(inv.getAvailableQuantity() - quantity);
-        return this.updateById(update);
+        return inventoryId != null && quantity != null && quantity > 0
+                && baseMapper.adjustStock(inventoryId, -quantity) == 1;
     }
 
     @Override
     public boolean addStock(Long inventoryId, Integer quantity) {
-        OGoodsInventory inv = this.getById(inventoryId);
-        if (inv == null) return false;
-
-        OGoodsInventory update = new OGoodsInventory();
-        update.setId(inventoryId);
-        update.setQuantity(inv.getQuantity() + quantity);
-        update.setAvailableQuantity(inv.getAvailableQuantity() + quantity);
-        return this.updateById(update);
+        return inventoryId != null && quantity != null && quantity > 0
+                && baseMapper.adjustStock(inventoryId, quantity) == 1;
     }
 
     @Override
     public boolean lockStock(Long inventoryId, Integer quantity) {
-        OGoodsInventory inv = this.getById(inventoryId);
-        if (inv == null) return false;
-        // 如果是负数（解锁），不能解锁超过已锁定的数量
-        if (quantity < 0 && inv.getLockedQuantity() < -quantity) return false;
-
-        OGoodsInventory update = new OGoodsInventory();
-        update.setId(inventoryId);
-        update.setLockedQuantity(inv.getLockedQuantity() + quantity);
-        update.setAvailableQuantity(inv.getAvailableQuantity() - quantity);
-        return this.updateById(update);
+        return inventoryId != null && quantity != null && quantity != 0
+                && baseMapper.adjustLock(inventoryId, quantity.longValue()) == 1;
     }
 }

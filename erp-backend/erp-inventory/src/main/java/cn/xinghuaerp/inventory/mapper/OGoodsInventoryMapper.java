@@ -11,4 +11,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  */
 public interface OGoodsInventoryMapper extends BaseMapper<OGoodsInventory> {
 
+    @org.apache.ibatis.annotations.Update("UPDATE o_goods_inventory SET quantity=quantity+#{delta}, available_quantity=available_quantity+#{delta} WHERE id=#{id} AND is_delete=0 AND quantity+#{delta} BETWEEN 0 AND 2147483647 AND available_quantity+#{delta} BETWEEN 0 AND 2147483647")
+    int adjustStock(@org.apache.ibatis.annotations.Param("id") Long id, @org.apache.ibatis.annotations.Param("delta") long delta);
+
+    @org.apache.ibatis.annotations.Update("UPDATE o_goods_inventory SET locked_quantity=locked_quantity+#{delta}, available_quantity=available_quantity-#{delta} WHERE id=#{id} AND is_delete=0 AND locked_quantity+#{delta} BETWEEN 0 AND 2147483647 AND available_quantity-#{delta} BETWEEN 0 AND 2147483647")
+    int adjustLock(@org.apache.ibatis.annotations.Param("id") Long id, @org.apache.ibatis.annotations.Param("delta") long delta);
 }

@@ -17,10 +17,10 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import cn.xinghuaerp.inventory.service.ErpWarehouseService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.inventory.facade.ErpWarehouseFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import cn.xinghuaerp.fulfillment.service.DouLogisticsTemplateService;
-import cn.xinghuaerp.system.service.ErpLogisticsCompanyService;
+import cn.xinghuaerp.system.facade.ErpLogisticsCompanyFacade;
 import cn.xinghuaerp.fulfillment.service.PddLogisticsTemplateService;
 import cn.xinghuaerp.fulfillment.service.PlatformLogisticsWaybillTemplateService;
 import cn.xinghuaerp.fulfillment.service.ShopWaybillAccountService;
@@ -42,9 +42,9 @@ public class ShopWaybillAccountController extends BaseController {
     private final PddLogisticsTemplateService pddTemplateService;
     private final DouLogisticsTemplateService douTemplateService;
     private final ShopWaybillAccountShareService shopWaybillAccountShareService;
-    private final ErpWarehouseService erpWarehouseService;
-    private final ErpLogisticsCompanyService logisticsCompanyService;
-    private final OShopService shopService;
+    private final ErpWarehouseFacade erpWarehouseService;
+    private final ErpLogisticsCompanyFacade logisticsCompanyService;
+    private final OShopFacade shopService;
     /**
      * 获取电子面单账户list
      * @param

@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class SysMessage {
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
+    private String dedupKey;
     private String type;
     private String level;
     private String title;

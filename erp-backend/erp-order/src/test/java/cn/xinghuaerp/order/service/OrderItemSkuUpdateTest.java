@@ -9,14 +9,14 @@ import cn.xinghuaerp.order.mapper.OOrderMapper;
 import cn.xinghuaerp.purchase.mapper.ErpSupplierMapper;
 import cn.xinghuaerp.order.entity.OOrder;
 import cn.xinghuaerp.order.entity.OOrderItem;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
 import cn.xinghuaerp.order.service.impl.OOrderItemServiceImpl;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class OrderItemSkuUpdateTest {
  @Test void allocatedOrUnknownRefundCannotChangeSku() {
-  var items=mock(OOrderItemMapper.class); var orders=mock(OOrderMapper.class); var skus=mock(OGoodsSkuService.class);
+  var items=mock(OOrderItemMapper.class); var orders=mock(OOrderMapper.class); var skus=mock(OGoodsSkuFacade.class);
   var service=new OOrderItemServiceImpl(items,orders,mock(cn.xinghuaerp.purchase.facade.PurchaseFacade.class),mock(cn.xinghuaerp.product.facade.ProductFacade.class),skus,mock(cn.xinghuaerp.product.facade.ProductFacade.class),mock(cn.xinghuaerp.inventory.facade.InventoryFacade.class));
   var item=new OOrderItem(); item.setOrderId("1"); item.setRefundStatus(1); item.setShipStatus(1); item.setHasPushErp(0);
   when(items.selectById(1L)).thenReturn(item);

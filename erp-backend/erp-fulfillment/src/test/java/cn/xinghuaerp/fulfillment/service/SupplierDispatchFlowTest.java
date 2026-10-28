@@ -46,7 +46,7 @@ import cn.xinghuaerp.inventory.service.impl.ErpStockOutServiceImpl;
 import cn.xinghuaerp.order.service.LocalAfterSaleService;
 import cn.xinghuaerp.system.service.SalesScope;
 import cn.xinghuaerp.order.service.impl.OOrderItemServiceImpl;
-import cn.xinghuaerp.order.service.impl.OOrderStockingItemBatchServiceImpl;
+import cn.xinghuaerp.inventory.service.impl.OOrderStockingItemBatchServiceImpl;
 import cn.xinghuaerp.order.service.impl.OOrderStockingItemServiceImpl;
 import cn.xinghuaerp.fulfillment.service.ManualShipmentService;
 import cn.xinghuaerp.purchase.service.SupplierDispatchService;
@@ -87,7 +87,7 @@ class SupplierDispatchFlowTest {
         var manualTarget=new ManualShipmentService(orderFacade,orderFacade,inventoryFacade,inventoryFacade,inventoryFacade,systemFacade,productFacade);
         var manualProxy=new ProxyFactory(manualTarget); manualProxy.setProxyTargetClass(true); manualProxy.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(ds),new AnnotationTransactionAttributeSource())); manual=(ManualShipmentService)manualProxy.getProxy();
         var txManager=new DataSourceTransactionManager(ds);
-        stocking=tx(inject(new OOrderStockingItemServiceImpl(inventoryFacade,inventoryFacade,inventoryFacade,inventoryFacade,inventoryFacade),session.getMapper(OOrderStockingItemMapper.class)),txManager);
+        stocking=tx(new OOrderStockingItemServiceImpl(inventoryFacade,inventoryFacade,inventoryFacade,inventoryFacade,inventoryFacade),txManager);
         var outItems=inject(new ErpStockOutItemServiceImpl(session.getMapper(ErpStockOutItemMapper.class)),session.getMapper(ErpStockOutItemMapper.class));
         var inventory=inject(new OGoodsInventoryServiceImpl(),session.getMapper(OGoodsInventoryMapper.class));
         var batches=inject(new OGoodsInventoryBatchServiceImpl(),session.getMapper(OGoodsInventoryBatchMapper.class));
@@ -161,7 +161,7 @@ class SupplierDispatchFlowTest {
                 OGoodsSkuMapper.class, OGoodsMapper.class, ErpWarehouseMapper.class)) config.addMapper(mapper);
         var factory = new MybatisSqlSessionFactoryBean(); factory.setDataSource(ds); factory.setConfiguration(config);
         var session = new SqlSessionTemplate(factory.getObject());
-        var skuService = org.mockito.Mockito.mock(cn.xinghuaerp.product.service.OGoodsSkuService.class);
+        var skuService = org.mockito.Mockito.mock(cn.xinghuaerp.product.facade.OGoodsSkuFacade.class);
         var purchaseFacade2 = new PurchaseFacadeImpl(null, session.getMapper(ErpSupplierMapper.class), null);
         var productFacade2 = new ProductFacadeImpl(null, session.getMapper(OGoodsMapper.class), session.getMapper(OGoodsSkuMapper.class), null, null);
         var inventoryFacade2 = new InventoryFacadeImpl(null, null, null, null, session.getMapper(ErpWarehouseMapper.class), null, null);

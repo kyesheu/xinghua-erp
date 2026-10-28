@@ -30,7 +30,6 @@ import cn.xinghuaerp.inventory.request.ShipRecordQueryRequest;
 import cn.xinghuaerp.inventory.request.SupplierShipOrderSearchRequest;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,26 +44,25 @@ import java.time.LocalDateTime;
 import cn.xinghuaerp.order.mapper.ShopOrderItemMapper;
 import cn.xinghuaerp.order.mapper.ErpSalesOrderItemMapper;
 import cn.xinghuaerp.order.mapper.ErpSalesOrderMapper;
-import cn.xinghuaerp.product.service.OGoodsService;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
-import cn.xinghuaerp.product.service.ShopGoodsSkuService;
-import cn.xinghuaerp.inventory.service.ErpWarehouseService;
-import cn.xinghuaerp.system.service.ErpMerchantService;
+import cn.xinghuaerp.product.facade.OGoodsFacade;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
+import cn.xinghuaerp.product.facade.ShopGoodsSkuFacade;
+import cn.xinghuaerp.inventory.facade.ErpWarehouseFacade;
+import cn.xinghuaerp.system.facade.ErpMerchantFacade;
 import cn.xinghuaerp.order.service.OOrderItemService;
 import cn.xinghuaerp.order.service.OOrderService;
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import cn.xinghuaerp.order.service.ShopOrderService;
 import cn.xinghuaerp.order.service.impl.OOrderStockingServiceImpl;
-import cn.xinghuaerp.product.service.ErpSupplierProductItemService;
-import cn.xinghuaerp.purchase.service.ErpSupplierService;
+import cn.xinghuaerp.product.facade.ErpSupplierProductItemFacade;
+import cn.xinghuaerp.purchase.facade.ErpSupplierFacade;
 import cn.xinghuaerp.enums.EnumOOrderStatus;
 import cn.xinghuaerp.enums.EnumShipStatus;
 import cn.xinghuaerp.enums.EnumShipType;
 import cn.xinghuaerp.enums.EnumShopType;
 import cn.xinghuaerp.enums.EnumWarehouseType;
-import cn.xinghuaerp.inventory.mapper.OOrderStockingMapper;
 /**
 * @author qilip
 * @description 针对表【o_supplier_ship_order(供应商发货订单)】的数据库操作Service实现
@@ -73,25 +71,25 @@ import cn.xinghuaerp.inventory.mapper.OOrderStockingMapper;
 @Slf4j
 @AllArgsConstructor
 @Service
-public class OOrderStockingServiceImpl extends ServiceImpl<OOrderStockingMapper, OOrderStocking>
-    implements OOrderStockingService {
+public class OOrderStockingServiceImpl
+    implements OOrderStockingWorkflow {
     private final OOrderItemService orderItemService;
     private final OOrderService orderService;
-    private final OGoodsSkuService goodsSkuService;
-    private final OGoodsService goodsService;
-    private final OShopService shopService;
-    private final ErpMerchantService merchantService;
+    private final OGoodsSkuFacade goodsSkuService;
+    private final OGoodsFacade goodsService;
+    private final OShopFacade shopService;
+    private final ErpMerchantFacade merchantService;
     private final InventoryFacade shipOrderMapper;
-    private final OOrderStockingItemService shipOrderItemService;
-    private final ErpSupplierService supplierService;
+    private final OOrderStockingItemWorkflow shipOrderItemService;
+    private final ErpSupplierFacade supplierService;
     private final ErpSalesOrderMapper erpSalesOrderMapper;
     private final ErpSalesOrderItemMapper erpSalesOrderItemMapper;
     private final ShopOrderService shopOrderService;
     private final ShopOrderItemMapper shopOrderItemMapper;
-    private final ShopGoodsSkuService shopGoodsSkuMappingService;
-    private final ErpWarehouseService erpWarehouseService;
+    private final ShopGoodsSkuFacade shopGoodsSkuMappingService;
+    private final ErpWarehouseFacade erpWarehouseService;
     private final PurchaseFacade supplierCustomerMapper;
-    private final ErpSupplierProductItemService supplierProductItemService;
+    private final ErpSupplierProductItemFacade supplierProductItemService;
     private final ProductFacade supplierProductItemMapper;
 
 

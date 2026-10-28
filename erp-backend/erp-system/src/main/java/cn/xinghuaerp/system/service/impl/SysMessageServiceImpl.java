@@ -26,7 +26,12 @@ public class SysMessageServiceImpl implements ISysMessageService {
         if (msg.getId() != null) {
             mapper.updateById(msg);
         } else {
-            mapper.insert(msg);
+            try {
+                if (mapper.insert(msg) != 1) throw new IllegalStateException("消息保存失败");
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                if (msg.getDedupKey() == null || mapper.selectCount(new LambdaQueryWrapper<SysMessage>()
+                        .eq(SysMessage::getDedupKey, msg.getDedupKey())) == 0) throw e;
+            }
         }
     }
 

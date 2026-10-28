@@ -5,7 +5,7 @@ import cn.xinghuaerp.common.ResultVo;
 import cn.xinghuaerp.system.entity.ErpLogisticsCompany;
 import cn.xinghuaerp.fulfillment.entity.ErpShipLogistics;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.system.service.ErpLogisticsCompanyService;
+import cn.xinghuaerp.system.facade.ErpLogisticsCompanyFacade;
 import cn.xinghuaerp.fulfillment.service.ErpShipLogisticsService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.AllArgsConstructor;
@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/erp-api/ship/logistics")
 public class ShipLogisticsController extends BaseController {
     private final ErpShipLogisticsService shipLogisticsService;
-    private final ErpLogisticsCompanyService logisticsCompanyService;
+    private final ErpLogisticsCompanyFacade logisticsCompanyService;
 
     /**
      * 获取平台列表（从快递公司库中获取）

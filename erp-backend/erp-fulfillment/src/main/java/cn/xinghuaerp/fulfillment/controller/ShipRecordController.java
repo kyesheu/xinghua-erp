@@ -6,7 +6,7 @@ import cn.xinghuaerp.common.TableDataInfo;
 import cn.xinghuaerp.inventory.entity.OOrderStocking;
 import cn.xinghuaerp.inventory.request.ShipRecordQueryRequest;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/erp-api/ship/record")
 public class ShipRecordController extends BaseController {
 
-    private final OOrderStockingService stockingService;
+    private final OOrderStockingWorkflow stockingService;
 
     /**
      * 统一发货记录分页查询

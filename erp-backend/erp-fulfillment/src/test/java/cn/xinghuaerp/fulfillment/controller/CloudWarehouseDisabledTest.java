@@ -1,7 +1,7 @@
 package cn.xinghuaerp.fulfillment.controller;
 import cn.xinghuaerp.system.service.BusinessAccessService;
 import cn.xinghuaerp.system.security.LoginUser;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import cn.xinghuaerp.purchase.service.SupplierDispatchService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ class CloudWarehouseDisabledTest {
  @Test void neitherEntryCreatesStockingTasks() {
   var user = new LoginUser(); user.setUserId(1L);
   SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(user, null, List.of()));
-  var access = mock(BusinessAccessService.class); var stock = mock(OOrderStockingService.class); var dispatch = mock(SupplierDispatchService.class);
+  var access = mock(BusinessAccessService.class); var stock = mock(OOrderStockingWorkflow.class); var dispatch = mock(SupplierDispatchService.class);
   var orders = new ShipOrderCloudWarehouseController(stock, access); var items = new ShipOrderItemPushController(stock, dispatch, access);
   assertEquals(2001, orders.pushToCloudWarehouse(Map.of("ids", List.of(11L))).get("code"));
   assertEquals(2001, items.pushOrderItemToCloudWarehouse(Map.of("ids", List.of(22L))).get("code"));

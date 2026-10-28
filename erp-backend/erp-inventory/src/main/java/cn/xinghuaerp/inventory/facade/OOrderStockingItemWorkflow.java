@@ -1,4 +1,4 @@
-package cn.xinghuaerp.inventory.service;
+package cn.xinghuaerp.inventory.facade;
 
 import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
@@ -7,7 +7,6 @@ import cn.xinghuaerp.inventory.entity.OOrderStockingItem;
 import cn.xinghuaerp.inventory.bo.ShipStockUpCompleteBo;
 import cn.xinghuaerp.inventory.bo.StockingOrderItemBo;
 import cn.xinghuaerp.inventory.bo.SupplierShipOrderItemListBo;
-import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
 
@@ -16,7 +15,7 @@ import java.util.List;
 * @description 针对表【o_supplier_ship_order_item】的数据库操作Service
 * @createDate 2025-02-18 13:48:13
 */
-public interface OOrderStockingItemService extends IService<OOrderStockingItem> {
+public interface OOrderStockingItemWorkflow {
     /**
      * 查询供应商备货清单
      * @param bo
@@ -50,4 +49,9 @@ public interface OOrderStockingItemService extends IService<OOrderStockingItem> 
     ResultVo generateStockOutByOrder(ShipStockUpCompleteBo bo);
 
 
+    OOrderStockingItem getById(java.io.Serializable id);
+    boolean save(OOrderStockingItem item);
+    boolean updateById(OOrderStockingItem item);
+    long count(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStockingItem> wrapper);
+    List<OOrderStockingItem> list(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStockingItem> wrapper);
 }

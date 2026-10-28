@@ -50,7 +50,7 @@ import cn.xinghuaerp.inventory.service.impl.ErpStockOutItemServiceImpl;
 import cn.xinghuaerp.inventory.service.impl.ErpStockOutServiceImpl;
 import cn.xinghuaerp.order.service.LocalAfterSaleService;
 import cn.xinghuaerp.system.service.SalesScope;
-import cn.xinghuaerp.order.service.impl.OOrderStockingItemBatchServiceImpl;
+import cn.xinghuaerp.inventory.service.impl.OOrderStockingItemBatchServiceImpl;
 import cn.xinghuaerp.order.service.impl.OOrderStockingItemServiceImpl;
 import cn.xinghuaerp.fulfillment.service.ManualShipmentService;
 import cn.xinghuaerp.utils.UUID;
@@ -103,13 +103,13 @@ class LocalAfterSaleFlowTest {
         var productFacade = new ProductFacadeImpl(map(ErpSupplierProductItemMapper.class), null, map(OGoodsSkuMapper.class), null, null);
         var systemFacade = new SystemFacadeImpl(map(ErpLogisticsCompanyMapper.class), null, null);
         shipment = tx(new ManualShipmentService(orderFacade, orderFacade, inventoryFacade, inventoryFacade, inventoryFacade, systemFacade, productFacade));
-        stocking = tx(inject(new OOrderStockingItemServiceImpl(inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade), map(OOrderStockingItemMapper.class)));
+        stocking = tx(new OOrderStockingItemServiceImpl(inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade));
         var inventory = inject(new OGoodsInventoryServiceImpl(), map(OGoodsInventoryMapper.class));
         var batches = inject(new OGoodsInventoryBatchServiceImpl(), map(OGoodsInventoryBatchMapper.class));
         outbound = tx(new ErpStockOutServiceImpl(map(ErpStockOutMapper.class), inject(new ErpStockOutItemServiceImpl(map(ErpStockOutItemMapper.class)), map(ErpStockOutItemMapper.class)), null,
                 inject(new OOrderStockingItemBatchServiceImpl(), map(OOrderStockingItemBatchMapper.class)), stocking, map(OOrderStockingMapper.class), inventory, batches));
         inbound = tx(new ErpStockInServiceImpl(map(ErpStockInMapper.class), inject(new ErpStockInItemServiceImpl(), map(ErpStockInItemMapper.class)),
-                inject(new OGoodsSkuServiceImpl(map(OGoodsSkuMapper.class)), map(OGoodsSkuMapper.class)), null, null, inventory, batches));
+                new cn.xinghuaerp.product.facade.OGoodsSkuFacadeImpl(inject(new OGoodsSkuServiceImpl(map(OGoodsSkuMapper.class)), map(OGoodsSkuMapper.class))), null, null, inventory, batches));
         after = tx(new LocalAfterSaleService(map(OOrderMapper.class), map(OOrderItemMapper.class), productFacade, map(ShopRefundMapper.class), map(ORefundMapper.class), map(ORefundAfterSaleMapper.class), inventoryFacade, systemFacade, inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade, map(ShopOrderMapper.class), purchaseFacade, purchaseFacade, productFacade));
         db.update("INSERT INTO erp_warehouse(id,warehouse_type,warehouse_no,warehouse_name,status,merchant_id,warehouse_source) VALUES(1,'LOCAL','MAIN','主仓',1,0,0)");
         db.update("INSERT INTO erp_logistics_company(id,name,code,status) VALUES(1,'测试快递','TEST',1)");

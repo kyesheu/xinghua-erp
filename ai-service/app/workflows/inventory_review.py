@@ -1,6 +1,8 @@
 """库存审核的可恢复流程；ERP 仍是审核决定和业务写入的权威来源。"""
 from typing import TypedDict
-from threading import Lock
+from contextlib import closing, contextmanager, nullcontext
+from pathlib import Path
+import sqlite3
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -27,14 +29,24 @@ def build_review_graph(checkpointer):
     return builder.compile(checkpointer=checkpointer)
 
 
-_sync_lock = Lock()
+@contextmanager
+def _sqlite_review_lock(path: str):
+    """使用独立锁库保护完整读/恢复过程，覆盖同机多个 worker。"""
+    lock_path = str(Path(path).resolve()) + ".review-lock"
+    with closing(sqlite3.connect(lock_path, timeout=30)) as guard:
+        guard.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        finally:
+            guard.rollback()
+
 
 
 def sync_review(path: str, task_id: str, suggested_quantity: int, decision: dict | None, postgres_dsn: str = "") -> dict:
     """从 Java 的已提交状态恢复检查点，重复同步不重复恢复流程。"""
     config = {"configurable": {"thread_id": task_id}}
     saver = PostgresSaver.from_conn_string(postgres_dsn) if postgres_dsn else SqliteSaver.from_conn_string(path)
-    with _sync_lock, saver as checkpointer:
+    with (nullcontext() if postgres_dsn else _sqlite_review_lock(path)), saver as checkpointer:
         if postgres_dsn:
             # 会话锁随数据库连接关闭释放，确保多个 Python 进程串行处理同一任务。
             checkpointer.conn.execute("SELECT pg_advisory_lock(hashtextextended(%s, 0))", (task_id,))

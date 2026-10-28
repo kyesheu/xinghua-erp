@@ -1,12 +1,10 @@
 package cn.xinghuaerp.order.service.impl;
 
 import cn.xinghuaerp.common.ResultVo;
-import cn.xinghuaerp.order.mq.OrderEventPublisher;
 import cn.xinghuaerp.order.service.OOrderService;
 import cn.xinghuaerp.order.service.ORefundService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -17,10 +15,6 @@ public class ShopSyncService {
     private final OOrderService oOrderService;
     private final ORefundService oRefundService;
 
-    /** MQ 开启（erp.mq.enabled=true）时注入；关闭时为 null，同步主流程不受影响。 */
-    @Autowired(required = false)
-    private OrderEventPublisher orderEventPublisher;
-
     public ResultVo<Long> syncOrder(Long shopOrderId) {
         if (shopOrderId == null || shopOrderId <= 0) {
             return ResultVo.error("shopOrderId 无效");
@@ -29,9 +23,6 @@ public class ShopSyncService {
             ResultVo<Long> r = oOrderService.shopOrderMessage(shopOrderId);
             if (r.getCode() == 0) {
                 log.info("订单同步成功：shopOrderId={}", shopOrderId);
-                if (orderEventPublisher != null) {
-                    orderEventPublisher.publishOrderCreated(shopOrderId, r.getData());
-                }
             } else {
                 log.warn("订单同步失败：shopOrderId={}, 原因={}", shopOrderId, r.getMsg());
             }

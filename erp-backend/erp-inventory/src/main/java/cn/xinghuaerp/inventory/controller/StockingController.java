@@ -7,8 +7,8 @@ import cn.xinghuaerp.inventory.bo.ShipStockUpCompleteBo;
 import cn.xinghuaerp.inventory.bo.StockingOrderBo;
 import cn.xinghuaerp.inventory.bo.StockingOrderItemBo;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -22,8 +22,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/erp-api/ship/stocking")
 public class StockingController extends BaseController {
 
-    private final OOrderStockingService stockingService;
-    private final OOrderStockingItemService stockingItemService;
+    private final OOrderStockingWorkflow stockingService;
+    private final OOrderStockingItemWorkflow stockingItemService;
 
     /**
      * 备货清单列表

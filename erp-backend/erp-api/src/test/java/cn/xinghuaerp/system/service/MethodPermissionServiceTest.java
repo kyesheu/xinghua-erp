@@ -3,7 +3,7 @@ package cn.xinghuaerp.system.service;
 import cn.xinghuaerp.fulfillment.controller.ShipOrderCloudWarehouseController;
 import cn.xinghuaerp.system.security.LoginUser;
 import cn.xinghuaerp.system.security.SecurityConfig;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -26,8 +26,8 @@ class MethodPermissionServiceTest {
   @Bean AiAgentPermissionService permissions() { return mock(AiAgentPermissionService.class); }
   @Bean(name="ss") MethodPermissionService ss(AiAgentPermissionService p) { return new MethodPermissionService(p); }
   @Bean BusinessAccessService access() { return mock(BusinessAccessService.class); }
-  @Bean OOrderStockingService stock() { return mock(OOrderStockingService.class); }
-  @Bean ShipOrderCloudWarehouseController controller(OOrderStockingService s, BusinessAccessService a) { return new ShipOrderCloudWarehouseController(s,a); }
+  @Bean OOrderStockingWorkflow stock() { return mock(OOrderStockingWorkflow.class); }
+  @Bean ShipOrderCloudWarehouseController controller(OOrderStockingWorkflow s, BusinessAccessService a) { return new ShipOrderCloudWarehouseController(s,a); }
  }
  @Test void proxyUsesLivePermissionsAndDeniesBeforeBusinessCode() {
   assertNotNull(SecurityConfig.class.getAnnotation(EnableMethodSecurity.class));

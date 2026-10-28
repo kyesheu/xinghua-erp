@@ -9,8 +9,8 @@ import cn.xinghuaerp.system.entity.OShopPlatform;
 import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.dou.DouTokenApiHelper;
 import cn.xinghuaerp.open.dou.model.Token;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -18,8 +18,8 @@ import org.springframework.util.StringUtils;
 @AllArgsConstructor
 @Component
 public class DouApiCommon {
-    private final OShopService shopService;
-    private final OShopPlatformService platformService;
+    private final OShopFacade shopService;
+    private final OShopPlatformFacade platformService;
 
     public ResultVo<ShopApiParams> checkBefore(Long shopId) {
         var shop = shopService.getById(shopId);

@@ -4,8 +4,8 @@ import cn.xinghuaerp.common.AjaxResult;
 import cn.xinghuaerp.common.utils.StringUtils;
 import cn.xinghuaerp.system.entity.OShopPlatform;
 import cn.xinghuaerp.platform.bo.TaoTokenSaveBo;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
@@ -23,8 +23,8 @@ import java.io.IOException;
 @RestController
 public class TaoOAuthController {
 
-    private final OShopPlatformService platformService;
-    private final OShopService shopService;
+    private final OShopPlatformFacade platformService;
+    private final OShopFacade shopService;
     private static Logger log = LoggerFactory.getLogger(TaoOAuthController.class);
     /**
      * 淘宝授权url

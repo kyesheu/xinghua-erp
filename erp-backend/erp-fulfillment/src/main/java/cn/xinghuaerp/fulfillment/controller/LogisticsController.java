@@ -7,8 +7,8 @@ import cn.xinghuaerp.common.TableDataInfo;
 import cn.xinghuaerp.system.entity.ErpLogisticsCompany;
 import cn.xinghuaerp.system.request.LogisticsCompanyRequest;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.system.service.ErpLogisticsCompanyService;
-import cn.xinghuaerp.system.service.SysThirdSystemConfigService;
+import cn.xinghuaerp.system.facade.ErpLogisticsCompanyFacade;
+import cn.xinghuaerp.system.facade.SysThirdSystemConfigFacade;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,8 +18,8 @@ import java.util.Arrays;
 @RestController
 @RequestMapping("/api/erp-api/logistics")
 public class LogisticsController extends BaseController {
-    private final ErpLogisticsCompanyService logisticsCompanyService;
-    private SysThirdSystemConfigService thirdSystemConfigService;
+    private final ErpLogisticsCompanyFacade logisticsCompanyService;
+    private SysThirdSystemConfigFacade thirdSystemConfigService;
     /**
      * 查询店铺列表logistics
      */

@@ -25,4 +25,6 @@ public interface OrderFacade {
     java.util.List<ShopOrder> listShopOrder(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrder> wrapper);
     ShopOrder getShopOrderOne(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrder> wrapper);
     int updateShopOrder(ShopOrder entity);
+    OOrder getOOrderById(java.io.Serializable id);
+    com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrder> pageOOrder(com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrder> page, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrder> wrapper);
 }

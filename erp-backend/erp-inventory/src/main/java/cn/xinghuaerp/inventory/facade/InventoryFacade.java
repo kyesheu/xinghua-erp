@@ -36,4 +36,6 @@ public interface InventoryFacade {
     com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrderStocking> pageOOrderStocking(com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrderStocking> page, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStocking> wrapper);
     int updateOOrderStocking(OOrderStocking entity, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStocking> wrapper);
     int updateOOrderStocking(OOrderStocking entity);
+    java.util.List<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> listStockingBatches(com.baomidou.mybatisplus.core.conditions.Wrapper<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> wrapper);
+    OOrderStockingItem getStockingItemById(java.io.Serializable id);
 }

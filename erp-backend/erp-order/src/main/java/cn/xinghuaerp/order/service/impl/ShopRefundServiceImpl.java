@@ -14,7 +14,7 @@ import cn.xinghuaerp.enums.EnumShopOrderStatus;
 import cn.xinghuaerp.enums.EnumShopRefundPhase;
 import cn.xinghuaerp.order.request.SaleOrderAfterAddRequest;
 import cn.xinghuaerp.order.service.ShopRefundService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -45,7 +45,7 @@ import cn.xinghuaerp.order.mapper.ShopRefundMapper;
 @Service
 public class ShopRefundServiceImpl extends ServiceImpl<ShopRefundMapper, ShopRefund>
     implements ShopRefundService {
-    private final OShopService shopService;
+    private final OShopFacade shopService;
     private final ShopOrderItemMapper shopOrderItemMapper;
     private final ShopOrderMapper shopOrderMapper;
     private final OOrderItemMapper orderItemMapper;

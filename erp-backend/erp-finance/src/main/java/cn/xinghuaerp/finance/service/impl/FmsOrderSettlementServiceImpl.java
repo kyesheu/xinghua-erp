@@ -26,9 +26,9 @@ import java.util.*;
 import java.time.LocalDateTime;
 import cn.xinghuaerp.finance.mapper.FmsExpenseItemMapper;
 import cn.xinghuaerp.finance.mapper.FmsExpenseMapper;
-import cn.xinghuaerp.order.mapper.OOrderMapper;
-import cn.xinghuaerp.inventory.mapper.OOrderStockingItemBatchMapper;
-import cn.xinghuaerp.inventory.mapper.OOrderStockingMapper;
+
+
+
 
 @Service
 public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlementMapper, FmsOrderSettlement> implements FmsOrderSettlementService {
@@ -37,13 +37,13 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     private FmsOrderSettlementItemMapper settlementItemMapper;
 
     @Autowired
-    private cn.xinghuaerp.order.mapper.OOrderMapper orderMapper;
+    private cn.xinghuaerp.order.facade.OrderFacade orderMapper;
 
     @Autowired
-    private cn.xinghuaerp.inventory.mapper.OOrderStockingMapper orderStockingMapper;
+    private cn.xinghuaerp.inventory.facade.InventoryFacade orderStockingMapper;
 
     @Autowired
-    private cn.xinghuaerp.inventory.mapper.OOrderStockingItemBatchMapper itemBatchMapper;
+    private cn.xinghuaerp.inventory.facade.InventoryFacade itemBatchMapper;
 
     @Autowired
     private cn.xinghuaerp.finance.mapper.FmsExpenseItemMapper expenseItemMapper;
@@ -77,8 +77,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     @Override
     public List<OOrder> getUnsettledOrders(OrderSettlementQuery query, Page<OOrder> page) {
         QueryWrapper<OOrder> wrapper = new QueryWrapper<>();
-        wrapper.eq("settlement_status", 0);
-        wrapper.or().isNull("settlement_status");
+        wrapper.and(w -> w.eq("settlement_status", 0).or().isNull("settlement_status"));
         if (query != null) {
             if (query.getMerchantId() != null) {
                 wrapper.eq("merchant_id", query.getMerchantId());
@@ -91,7 +90,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             }
         }
         wrapper.orderByDesc("create_time");
-        orderMapper.selectPage(page, wrapper);
+        orderMapper.pageOOrder(page, wrapper);
         List<OOrder> orders = page.getRecords();
         for (OOrder order : orders) {
             order.setRemark(getPlatformName(order.getShopType()));
@@ -208,12 +207,12 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
                 expenseItemMapper.updateById(item);
             }
 
-            OOrder order = orderMapper.selectById(settlement.getOrderId());
+            OOrder order = orderMapper.getOOrderById(settlement.getOrderId());
             if (order != null) {
                 order.setSettlementStatus(0);
                 order.setSettlementId(null);
                 order.setSettlementTime(null);
-                orderMapper.updateById(order);
+                orderMapper.updateOOrder(order);
             }
 
             return baseMapper.deleteById(id) > 0;
@@ -235,7 +234,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
 
     @Override
     public FmsOrderSettlement calculateOrderSettlement(String orderId) {
-        OOrder order = orderMapper.selectById(orderId);
+        OOrder order = orderMapper.getOOrderById(orderId);
         if (order == null) {
             return null;
         }
@@ -290,7 +289,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     private BigDecimal calculatePurchaseCost(String orderId) {
         QueryWrapper<OOrderStockingItemBatch> wrapper = new QueryWrapper<>();
         wrapper.eq("order_id", orderId);
-        List<OOrderStockingItemBatch> batches = itemBatchMapper.selectList(wrapper);
+        List<OOrderStockingItemBatch> batches = itemBatchMapper.listStockingBatches(wrapper);
 
         BigDecimal totalCost = BigDecimal.ZERO;
         for (OOrderStockingItemBatch batch : batches) {
@@ -308,7 +307,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     private BigDecimal calculateShippingFee(String orderId) {
         QueryWrapper<OOrderStocking> wrapper = new QueryWrapper<>();
         wrapper.eq("o_order_id", Long.valueOf(orderId));
-        List<OOrderStocking> stockings = orderStockingMapper.selectList(wrapper);
+        List<OOrderStocking> stockings = orderStockingMapper.listOOrderStocking(wrapper);
 
         BigDecimal totalShippingFee = BigDecimal.ZERO;
         for (OOrderStocking stocking : stockings) {
@@ -399,12 +398,12 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     }
 
     private void updateOrderSettlementStatus(String orderId, Long settlementId) {
-        OOrder order = orderMapper.selectById(orderId);
+        OOrder order = orderMapper.getOOrderById(orderId);
         if (order != null) {
             order.setSettlementStatus(1);
             order.setSettlementId(settlementId);
             order.setSettlementTime(LocalDateTime.now());
-            orderMapper.updateById(order);
+            orderMapper.updateOOrder(order);
         }
     }
 

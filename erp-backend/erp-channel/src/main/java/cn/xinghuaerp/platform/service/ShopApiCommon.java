@@ -5,13 +5,13 @@ import cn.xinghuaerp.common.api.ShopApiParams;
 import cn.xinghuaerp.enums.HttpStatus;
 import cn.xinghuaerp.system.entity.OShop;
 import cn.xinghuaerp.system.entity.OShopPlatform;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.Instant;
-import cn.xinghuaerp.system.service.OShopPlatformService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
 
 /**
  * 统一店铺 API 公共类：根据 shopType + shopId 获取 appKey/appSecret/accessToken。<br>
@@ -21,8 +21,8 @@ import cn.xinghuaerp.system.service.OShopPlatformService;
 @Component
 @RequiredArgsConstructor
 public class ShopApiCommon {
-    private final OShopService shopService;
-    private final OShopPlatformService platformService;
+    private final OShopFacade shopService;
+    private final OShopPlatformFacade platformService;
 
     /**
      * 获取店铺 API 调用参数

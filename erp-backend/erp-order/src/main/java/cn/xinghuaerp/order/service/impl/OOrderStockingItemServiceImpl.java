@@ -14,8 +14,7 @@ import cn.xinghuaerp.inventory.bo.StockingOrderItemBo;
 import cn.xinghuaerp.inventory.bo.SupplierShipOrderItemListBo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,9 +23,8 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.*;
 
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
 import cn.xinghuaerp.order.service.impl.OOrderStockingItemServiceImpl;
-import cn.xinghuaerp.inventory.mapper.OOrderStockingItemMapper;
 /**
 * @author qilip
 * @description 针对表【o_supplier_ship_order_item】的数据库操作Service实现
@@ -34,8 +32,8 @@ import cn.xinghuaerp.inventory.mapper.OOrderStockingItemMapper;
 */
 @AllArgsConstructor
 @Service
-public class OOrderStockingItemServiceImpl extends ServiceImpl<OOrderStockingItemMapper, OOrderStockingItem>
-    implements OOrderStockingItemService {
+public class OOrderStockingItemServiceImpl
+    implements OOrderStockingItemWorkflow {
     private final InventoryFacade stockingMapper;
     private final InventoryFacade stockingItemMapper;
     private final InventoryFacade stockOutItemMapper;
@@ -249,4 +247,9 @@ public class OOrderStockingItemServiceImpl extends ServiceImpl<OOrderStockingIte
     private static void requireWrite(int affected) {
         if (affected != 1) throw new IllegalStateException("生成出库单失败，请重试");
     }
+    @Override public OOrderStockingItem getById(java.io.Serializable id) { return stockingItemMapper.getStockingItemById(id); }
+    @Override public boolean save(OOrderStockingItem item) { return stockingItemMapper.saveOOrderStockingItem(item) == 1; }
+    @Override public boolean updateById(OOrderStockingItem item) { return stockingItemMapper.updateOOrderStockingItem(item) == 1; }
+    @Override public long count(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStockingItem> wrapper) { return stockingItemMapper.countOOrderStockingItem(wrapper); }
+    @Override public List<OOrderStockingItem> list(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStockingItem> wrapper) { return stockingItemMapper.listOOrderStockingItem(wrapper); }
 }

@@ -85,3 +85,7 @@ export MINIO_SECRET_KEY=minioadmin
 - **backend**：容器化后端，需先在 `erp-backend/` 执行 `mvn -pl erp-api -am clean package -DskipTests` 产出 jar。
 - **frontend**：容器化前端开发服务（Vite 热更新），访问 http://localhost:88。
 - **nginx**：前端生产静态部署，需先在 `erp-frontend/` 执行 `npm run build` 产出 `dist/`，访问 http://localhost:80。
+
+## 已有数据库升级
+
+订单事件可靠投递版本需要在启动后端前，对已有数据库执行一次 `docker/mysql/upgrade-order-reliability.sql`，新增 Outbox 表及消息去重键；新数据库无需重复执行。执行前确认连接的是本地开发数据库。

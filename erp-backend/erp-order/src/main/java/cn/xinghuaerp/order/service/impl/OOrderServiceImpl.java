@@ -22,7 +22,7 @@ import cn.xinghuaerp.order.vo.SalesDailyVo;
 import cn.xinghuaerp.order.vo.WaitShipReportVo;
 import cn.xinghuaerp.order.service.ErpOrderMessageService;
 import cn.xinghuaerp.order.service.OOrderService;
-import cn.xinghuaerp.product.service.ShopGoodsSkuService;
+import cn.xinghuaerp.product.facade.ShopGoodsSkuFacade;
 import cn.xinghuaerp.order.service.ShopOrderService;
 import cn.xinghuaerp.order.request.OrderSearchRequest;
 
@@ -34,7 +34,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
 import cn.xinghuaerp.common.ResultVo;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +54,7 @@ import cn.xinghuaerp.order.mapper.OOrderMapper;
 import cn.xinghuaerp.order.mapper.ShopOrderItemMapper;
 import cn.xinghuaerp.order.mapper.ErpSalesOrderItemMapper;
 import cn.xinghuaerp.order.mapper.ErpSalesOrderMapper;
-import cn.xinghuaerp.product.service.ShopGoodsSkuService;
+import cn.xinghuaerp.product.facade.ShopGoodsSkuFacade;
 import cn.xinghuaerp.order.service.ErpOrderMessageService;
 import cn.xinghuaerp.order.service.OOrderService;
 import cn.xinghuaerp.order.service.ShopOrderService;
@@ -70,7 +70,7 @@ import cn.xinghuaerp.enums.EnumWarehouseType;
 * @createDate 2024-03-09 13:15:57
 */
 @Slf4j
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Service
 public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
     implements OOrderService {
@@ -85,7 +85,7 @@ public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
     private final ErpOrderMessageService erpOrderMessageService;
     private final ErpSalesOrderMapper erpSalesOrderMapper;
     private final ErpSalesOrderItemMapper erpSalesOrderItemMapper;
-    private final ShopGoodsSkuService shopGoodsSkuMappingService;
+    private final ShopGoodsSkuFacade shopGoodsSkuMappingService;
     private final SystemFacade oShopMapper;
     private final SystemFacade erpLogisticsCompanyMapper;
     private final InventoryFacade orderStockingMapper;
@@ -98,6 +98,9 @@ public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
      * @param shopOrderId
      * @return
      */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private cn.xinghuaerp.order.mq.OrderEventPublisher orderEventPublisher;
+
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ResultVo<Long> shopOrderMessage(Long shopOrderId) {
@@ -181,6 +184,8 @@ public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
                 sseService.broadcastNewOrderMessage(EnumShopType.getByIndex(insert.getShopType()),insert.getOrderNum());
                 // 插入orderItem
                 addShopOrderItem(insert, shopOrder);
+                if (orderEventPublisher != null) orderEventPublisher.publishOrderCreated(shopOrderId, Long.valueOf(insert.getId()));
+                return ResultVo.success(Long.valueOf(insert.getId()));
 
             }else{
                 log.info("=========统一shopOrder订单消息========已存在，更新==========");
@@ -256,7 +261,7 @@ public class OOrderServiceImpl extends ServiceImpl<OOrderMapper, OOrder>
                 // 插入orderItem
                 addShopOrderItem(update, shopOrder);
             }
-            return ResultVo.success();
+            return ResultVo.success(Long.valueOf(oOrders.get(0).getId()));
         }else {
             log.error("=====没有找到shopOrder数据===");
             return ResultVo.error("数据不存在");

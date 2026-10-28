@@ -12,7 +12,7 @@ import cn.xinghuaerp.order.entity.OOrder;
 import cn.xinghuaerp.order.entity.OOrderItem;
 import cn.xinghuaerp.purchase.entity.ErpSupplier;
 import cn.xinghuaerp.order.request.OrderSearchRequest;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
 import cn.xinghuaerp.order.query.OrderItemQuery;
 import cn.xinghuaerp.inventory.vo.OrderItemListVo;
 import cn.xinghuaerp.order.mapper.OOrderItemMapper;
@@ -46,7 +46,7 @@ public class OOrderItemServiceImpl extends ServiceImpl<OOrderItemMapper, OOrderI
     private final OOrderMapper orderMapper;
     private final PurchaseFacade goodsSupplierMapper;
     private final ProductFacade goodsSkuMapper;
-    private final OGoodsSkuService goodsSkuService;
+    private final OGoodsSkuFacade goodsSkuService;
     private final ProductFacade goodsMapper;
     private final InventoryFacade erpWarehouseMapper;
 

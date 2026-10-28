@@ -23,10 +23,10 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import cn.xinghuaerp.product.service.OGoodsSkuService;
-import cn.xinghuaerp.product.service.ShopGoodsService;
-import cn.xinghuaerp.product.service.ShopGoodsSkuService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
+import cn.xinghuaerp.product.facade.ShopGoodsFacade;
+import cn.xinghuaerp.product.facade.ShopGoodsSkuFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import cn.xinghuaerp.common.AjaxResult;
 import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
@@ -37,11 +37,11 @@ import cn.xinghuaerp.common.TableDataInfo;
 @RestController
 @AllArgsConstructor
 public class ShopGoodsController extends BaseController {
-    private final OShopService oShopService;
-    private final ShopGoodsService goodsService;
-    private final ShopGoodsSkuService skuService;
-    private final OGoodsSkuService oGoodsSkuService;
-    private final OShopService shopService;
+    private final OShopFacade oShopService;
+    private final ShopGoodsFacade goodsService;
+    private final ShopGoodsSkuFacade skuService;
+    private final OGoodsSkuFacade oGoodsSkuService;
+    private final OShopFacade shopService;
     private final ShopPullApiService shopPullApiService;
 
     /**

@@ -9,8 +9,8 @@ import cn.xinghuaerp.platform.bo.PddTokenCreateBo;
 import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.pdd.PddTokenApiHelper;
 import cn.xinghuaerp.open.pdd.model.Token;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import tools.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -31,9 +31,9 @@ import java.util.Map;
 @RestController
 public class PddOAuthController {
     @Autowired
-    private OShopService shopService;
+    private OShopFacade shopService;
     @Autowired
-    private OShopPlatformService platformService;
+    private OShopPlatformFacade platformService;
 
     @Value("${xinghuaerp.auth-redirect-url:''}")
     private String authRedirectUrl;

@@ -5,9 +5,8 @@ import cn.xinghuaerp.system.service.BusinessAccessService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import cn.xinghuaerp.order.vo.SalesDailyVo;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.order.service.OOrderItemService;
-import cn.xinghuaerp.order.service.OOrderService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.order.facade.OOrderFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,9 +20,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/erp-api/report")
 public class ReportController extends BaseController {
-    private final OOrderService orderService;
-    private final OOrderItemService orderItemService;
-    private final OShopService shopService;
+    private final OOrderFacade orderService;
+    private final OShopFacade shopService;
     private final BusinessAccessService access;
 
     @PreAuthorize("@ss.hasPermi('shop:order:list')")

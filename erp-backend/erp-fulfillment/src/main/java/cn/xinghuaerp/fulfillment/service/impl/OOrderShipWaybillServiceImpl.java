@@ -18,7 +18,7 @@ import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
 import cn.xinghuaerp.common.ResultVo;
 import cn.xinghuaerp.enums.*;
-import cn.xinghuaerp.order.service.OOrderService;
+import cn.xinghuaerp.order.facade.OOrderFacade;
 import cn.xinghuaerp.fulfillment.service.OOrderShipWaybillService;
 import cn.xinghuaerp.utils.DateUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -39,7 +39,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import cn.xinghuaerp.fulfillment.mapper.OOrderShipWaybillMapper;
-import cn.xinghuaerp.order.service.OOrderService;
+import cn.xinghuaerp.order.facade.OOrderFacade;
 import cn.xinghuaerp.fulfillment.service.OOrderShipWaybillService;
 import cn.xinghuaerp.fulfillment.service.impl.OOrderShipWaybillServiceImpl;
 import cn.xinghuaerp.enums.EnumOOrderStatus;
@@ -60,7 +60,7 @@ public class OOrderShipWaybillServiceImpl extends ServiceImpl<OOrderShipWaybillM
     private final InventoryFacade orderStockingMapper;
     private final InventoryFacade orderStockingItemMapper;
     private final OrderFacade orderItemMapper;
-    private final OOrderService oOrderService;
+    private final OOrderFacade oOrderService;
     private final OrderFacade erpSalesOrderMapper;
     private final OrderFacade erpSalesOrderItemMapper;
     private final OrderFacade shopOrderItemMapper;

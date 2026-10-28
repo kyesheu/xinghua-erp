@@ -34,12 +34,12 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import java.time.LocalDateTime;
 
 import cn.xinghuaerp.order.mapper.ORefundAfterSaleMapper;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
-import cn.xinghuaerp.inventory.service.ErpStockInItemService;
-import cn.xinghuaerp.inventory.service.ErpStockInService;
-import cn.xinghuaerp.inventory.service.ErpWarehouseService;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
+import cn.xinghuaerp.inventory.facade.ErpStockInItemFacade;
+import cn.xinghuaerp.inventory.facade.ErpStockInFacade;
+import cn.xinghuaerp.inventory.facade.ErpWarehouseFacade;
 import cn.xinghuaerp.order.service.OOrderService;
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
 import cn.xinghuaerp.order.service.ORefundAfterSaleService;
 import cn.xinghuaerp.order.service.impl.ORefundAfterSaleServiceImpl;
 /**
@@ -55,11 +55,11 @@ public class ORefundAfterSaleServiceImpl extends ServiceImpl<ORefundAfterSaleMap
     private final ORefundAfterSaleMapper mapper;
     private final OOrderService orderService;
     private final InventoryFacade shipOrderMapper;
-    private final OOrderStockingItemService shipOrderItemService;
-    private final ErpStockInService erpStockInService;
-    private final ErpStockInItemService erpStockInItemService;
-    private final ErpWarehouseService erpWarehouseService;
-    private final OGoodsSkuService oGoodsSkuService;
+    private final OOrderStockingItemWorkflow shipOrderItemService;
+    private final ErpStockInFacade erpStockInService;
+    private final ErpStockInItemFacade erpStockInItemService;
+    private final ErpWarehouseFacade erpWarehouseService;
+    private final OGoodsSkuFacade oGoodsSkuService;
     @Override
     public PageResult<ORefundAfterSale> queryPageList(ORefundAfterSale bo, PageQuery pageQuery) {
         LambdaQueryWrapper<ORefundAfterSale> queryWrapper = new LambdaQueryWrapper<ORefundAfterSale>()

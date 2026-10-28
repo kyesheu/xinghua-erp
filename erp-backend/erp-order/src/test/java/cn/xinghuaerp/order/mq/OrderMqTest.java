@@ -2,7 +2,7 @@ package cn.xinghuaerp.order.mq;
 
 import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.system.entity.SysMessage;
-import cn.xinghuaerp.system.service.ISysMessageService;
+import cn.xinghuaerp.system.facade.MessageFacade;
 import com.rabbitmq.client.Channel;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -46,48 +46,34 @@ class OrderMqTest {
 
     @Test
     void validEventSavesMessageAndAcks() throws IOException {
-        var service = mock(ISysMessageService.class);
-        when(service.existsByTitle(anyString())).thenReturn(false);
+        var service = mock(MessageFacade.class);
         var channel = mock(Channel.class);
         var consumer = new OrderCreatedConsumer(service);
         Message message = jsonMessage(event());
 
         consumer.onMessage(message, channel);
 
-        verify(service).save(any(SysMessage.class));
+        verify(service).saveMessage(any(SysMessage.class));
         verify(channel).basicAck(0L, false);
         verify(channel, never()).basicNack(anyLong(), anyBoolean(), anyBoolean());
     }
 
     @Test
-    void duplicateEventSkipsSaveButAcks() throws IOException {
-        var service = mock(ISysMessageService.class);
-        when(service.existsByTitle("新订单转入-22")).thenReturn(true);
-        var channel = mock(Channel.class);
-        var consumer = new OrderCreatedConsumer(service);
-
-        consumer.onMessage(jsonMessage(event()), channel);
-
-        verify(service, never()).save(any(SysMessage.class));
-        verify(channel).basicAck(0L, false);
-    }
-
-    @Test
     void brokenPayloadGoesToDeadLetter() throws IOException {
-        var service = mock(ISysMessageService.class);
+        var service = mock(MessageFacade.class);
         var channel = mock(Channel.class);
         var consumer = new OrderCreatedConsumer(service);
 
         consumer.onMessage(new Message("not-json".getBytes(java.nio.charset.StandardCharsets.UTF_8)), channel);
 
-        verify(service, never()).save(any(SysMessage.class));
+        verify(service, never()).saveMessage(any(SysMessage.class));
         verify(channel).basicNack(0L, false, false);
         verify(channel, never()).basicAck(anyLong(), anyBoolean());
     }
 
     @Test
     void missingOrderIdGoesToDeadLetter() throws IOException {
-        var service = mock(ISysMessageService.class);
+        var service = mock(MessageFacade.class);
         var channel = mock(Channel.class);
         var consumer = new OrderCreatedConsumer(service);
         OrderCreatedEvent bad = new OrderCreatedEvent("msg-2", 11L, null,
@@ -95,15 +81,14 @@ class OrderMqTest {
 
         consumer.onMessage(jsonMessage(bad), channel);
 
-        verify(service, never()).save(any(SysMessage.class));
+        verify(service, never()).saveMessage(any(SysMessage.class));
         verify(channel).basicNack(0L, false, false);
     }
 
     @Test
     void saveFailureGoesToDeadLetterInsteadOfBlocking() throws IOException {
-        var service = mock(ISysMessageService.class);
-        when(service.existsByTitle(anyString())).thenReturn(false);
-        org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(service).save(any(SysMessage.class));
+        var service = mock(MessageFacade.class);
+        org.mockito.Mockito.doThrow(new RuntimeException("db down")).when(service).saveMessage(any(SysMessage.class));
         var channel = mock(Channel.class);
         var consumer = new OrderCreatedConsumer(service);
 
@@ -113,34 +98,27 @@ class OrderMqTest {
     }
 
     @Test
-    void publisherSendsJsonToOrderExchange() {
-        var template = mock(org.springframework.amqp.rabbit.core.RabbitTemplate.class);
-        var publisher = new OrderEventPublisher(template);
-
+    void publisherRecordsEventForTransaction() {
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        var publisher = new OrderEventPublisher(jdbc);
         publisher.publishOrderCreated(11L, 22L);
-
-        verify(template).convertAndSend(eq(OrderMqConfig.ORDER_EXCHANGE),
-                eq(OrderMqConfig.ORDER_CREATED_ROUTING_KEY), contains("\"orderId\":22"));
+        verify(jdbc).update(contains("INSERT INTO order_event_outbox"), any(), eq(22L), contains("\"orderId\":22"));
     }
 
     @Test
-    void publisherSkipsInvalidShopOrderId() {
-        var template = mock(org.springframework.amqp.rabbit.core.RabbitTemplate.class);
-        var publisher = new OrderEventPublisher(template);
-
-        publisher.publishOrderCreated(null, 22L);
-        publisher.publishOrderCreated(0L, 22L);
-
-        verify(template, never()).convertAndSend(anyString(), anyString(), any(Object.class));
+    void publisherRejectsInvalidOrder() {
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        var publisher = new OrderEventPublisher(jdbc);
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> publisher.publishOrderCreated(11L, null));
     }
 
     @Test
-    void publisherSwallowsBrokerFailure() {
-        var template = mock(org.springframework.amqp.rabbit.core.RabbitTemplate.class);
-        org.mockito.Mockito.doThrow(new RuntimeException("broker down"))
-                .when(template).convertAndSend(anyString(), anyString(), any(Object.class));
-        var publisher = new OrderEventPublisher(template);
-
-        assertDoesNotThrow(() -> publisher.publishOrderCreated(11L, 22L));
+    void publisherPropagatesStorageFailureToRollbackOrder() {
+        var jdbc = mock(org.springframework.jdbc.core.JdbcTemplate.class);
+        when(jdbc.update(anyString(), any(), any(), any())).thenThrow(new RuntimeException("db down"));
+        var publisher = new OrderEventPublisher(jdbc);
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class,
+                () -> publisher.publishOrderCreated(11L, 22L));
     }
 }

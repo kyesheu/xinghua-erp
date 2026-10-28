@@ -1,4 +1,4 @@
-package cn.xinghuaerp.inventory.service;
+package cn.xinghuaerp.inventory.facade;
 
 import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
@@ -10,7 +10,6 @@ import cn.xinghuaerp.inventory.bo.StockingOrderBo;
 import cn.xinghuaerp.inventory.vo.PushOrderToShipperResult;
 import cn.xinghuaerp.inventory.request.ShipRecordQueryRequest;
 import cn.xinghuaerp.inventory.request.SupplierShipOrderSearchRequest;
-import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
 
@@ -19,7 +18,7 @@ import java.util.List;
 * @description 针对表【o_supplier_ship_order(供应商发货订单)】的数据库操作Service
 * @createDate 2025-02-18 11:56:14
 */
-public interface OOrderStockingService extends IService<OOrderStocking> {
+public interface OOrderStockingWorkflow {
     /**
      * 分配给供应商发货（order维度）
      * @param orderId

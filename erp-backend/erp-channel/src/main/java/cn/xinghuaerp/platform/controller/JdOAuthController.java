@@ -5,8 +5,8 @@ import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.common.AjaxResult;
 import cn.xinghuaerp.system.entity.OShopPlatform;
 import cn.xinghuaerp.platform.bo.JdTokenCreateBo;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.AllArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +23,8 @@ import java.net.http.HttpResponse;
 @AllArgsConstructor
 @RestController
 public class JdOAuthController {
-    private final OShopPlatformService platformService;
-    private final OShopService shopService;
+    private final OShopPlatformFacade platformService;
+    private final OShopFacade shopService;
     private static Logger log = LoggerFactory.getLogger(JdOAuthController.class);
 
     @GetMapping("/oauth")

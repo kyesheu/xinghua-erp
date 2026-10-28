@@ -7,8 +7,8 @@ import cn.xinghuaerp.enums.EnumShopType;
 import cn.xinghuaerp.enums.HttpStatus;
 import cn.xinghuaerp.system.entity.OShop;
 import cn.xinghuaerp.system.entity.OShopPlatform;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.AllArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -22,8 +22,8 @@ import org.springframework.util.StringUtils;
 @AllArgsConstructor
 @Component
 public class PddApiCommon {
-    private final OShopService shopService;
-    private final OShopPlatformService platformService;
+    private final OShopFacade shopService;
+    private final OShopPlatformFacade platformService;
 
     /**
      * 拉取前校验，返回 appKey/appSecret/accessToken 等参数

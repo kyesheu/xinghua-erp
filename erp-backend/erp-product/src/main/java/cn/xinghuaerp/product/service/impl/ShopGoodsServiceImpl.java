@@ -19,7 +19,7 @@ import cn.xinghuaerp.product.mapper.OGoodsSkuMapper;
 import cn.xinghuaerp.product.mapper.ShopGoodsMapper;
 import cn.xinghuaerp.product.mapper.ShopGoodsSkuMapper;
 import cn.xinghuaerp.product.service.OGoodsSkuService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import cn.xinghuaerp.product.service.ShopGoodsService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -50,7 +50,7 @@ public class ShopGoodsServiceImpl extends ServiceImpl<ShopGoodsMapper, ShopGoods
     private final OGoodsSkuService goodsSkuService;
     private final ShopGoodsSkuMapper shopGoodsSkuMapper;
 //    private final ShopGoodsSkuMappingService shopGoodsSkuMappingService;
-    private final OShopService shopService;
+    private final OShopFacade shopService;
 
     @Override
     public PageResult<ShopGoods> queryPageList(ShopGoods bo, PageQuery pageQuery) {

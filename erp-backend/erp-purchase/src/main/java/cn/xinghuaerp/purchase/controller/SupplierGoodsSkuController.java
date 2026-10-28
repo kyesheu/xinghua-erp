@@ -7,7 +7,7 @@ import cn.xinghuaerp.purchase.entity.ErpSupplierGoodsPrice;
 import cn.xinghuaerp.product.entity.ErpSupplierProductItem;
 import cn.xinghuaerp.purchase.mapper.ErpSupplierGoodsPriceMapper;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.product.service.ErpSupplierProductItemService;
+import cn.xinghuaerp.product.facade.ErpSupplierProductItemFacade;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.AllArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/erp-api/supplier/goods_sku")
 public class SupplierGoodsSkuController extends BaseController {
 
-    private final ErpSupplierProductItemService supplierProductItemService;
+    private final ErpSupplierProductItemFacade supplierProductItemService;
     private final ErpSupplierGoodsPriceMapper supplierGoodsPriceMapper;
 
     /**

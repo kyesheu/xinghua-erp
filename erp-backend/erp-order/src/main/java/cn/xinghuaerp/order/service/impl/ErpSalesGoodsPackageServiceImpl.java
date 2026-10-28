@@ -8,7 +8,7 @@ import cn.xinghuaerp.order.entity.ErpSalesGoodsPackage;
 import cn.xinghuaerp.order.entity.ErpSalesGoodsPackageItem;
 import cn.xinghuaerp.product.entity.OGoodsSku;
 import cn.xinghuaerp.order.service.ErpSalesGoodsPackageService;
-import cn.xinghuaerp.product.service.OGoodsSkuService;
+import cn.xinghuaerp.product.facade.OGoodsSkuFacade;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -28,7 +28,7 @@ import java.util.List;
 public class ErpSalesGoodsPackageServiceImpl extends ServiceImpl<ErpSalesGoodsPackageMapper, ErpSalesGoodsPackage> implements ErpSalesGoodsPackageService {
 
     private final ErpSalesGoodsPackageItemMapper packageItemMapper;
-    private final OGoodsSkuService oGoodsSkuService;
+    private final OGoodsSkuFacade oGoodsSkuService;
 
     @Override
     public PageResult<ErpSalesGoodsPackage> queryPageList(PageQuery pageQuery) {

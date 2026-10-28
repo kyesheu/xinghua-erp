@@ -35,7 +35,7 @@ import cn.xinghuaerp.inventory.service.ErpStockOutItemService;
 import cn.xinghuaerp.inventory.service.ErpStockOutService;
 import cn.xinghuaerp.inventory.service.ErpWarehouseService;
 import cn.xinghuaerp.inventory.service.OOrderStockingItemBatchService;
-import cn.xinghuaerp.inventory.service.OOrderStockingItemService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingItemWorkflow;
 import cn.xinghuaerp.common.PageQuery;
 import cn.xinghuaerp.common.PageResult;
 import cn.xinghuaerp.common.ResultVo;
@@ -53,7 +53,7 @@ public class ErpStockOutServiceImpl extends ServiceImpl<ErpStockOutMapper, ErpSt
     private final ErpStockOutItemService outItemService;
     private final ErpWarehouseService erpWarehouseService;
     private final OOrderStockingItemBatchService orderStockingItemBatchService;
-    private final OOrderStockingItemService orderStockingItemService;
+    private final OOrderStockingItemWorkflow orderStockingItemService;
     private final OOrderStockingMapper orderStockingMapper;
     private final OGoodsInventoryService oGoodsInventoryService;
     private final OGoodsInventoryBatchService oGoodsInventoryBatchService;

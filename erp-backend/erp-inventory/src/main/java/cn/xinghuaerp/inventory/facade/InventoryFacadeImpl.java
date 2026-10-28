@@ -54,4 +54,8 @@ public class InventoryFacadeImpl implements InventoryFacade {
     @Override public com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrderStocking> pageOOrderStocking(com.baomidou.mybatisplus.extension.plugins.pagination.Page<OOrderStocking> page, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStocking> wrapper) { return oOrderStockingMapper.selectPage(page, wrapper); }
     @Override public int updateOOrderStocking(OOrderStocking entity, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderStocking> wrapper) { return oOrderStockingMapper.update(entity, wrapper); }
     @Override public int updateOOrderStocking(OOrderStocking entity) { return oOrderStockingMapper.updateById(entity); }
+    @org.springframework.beans.factory.annotation.Autowired
+    private cn.xinghuaerp.inventory.mapper.OOrderStockingItemBatchMapper stockingBatchMapper;
+    @Override public java.util.List<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> listStockingBatches(com.baomidou.mybatisplus.core.conditions.Wrapper<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> wrapper) { return stockingBatchMapper.selectList(wrapper); }
+    @Override public OOrderStockingItem getStockingItemById(java.io.Serializable id) { return oOrderStockingItemMapper.selectById(id); }
 }

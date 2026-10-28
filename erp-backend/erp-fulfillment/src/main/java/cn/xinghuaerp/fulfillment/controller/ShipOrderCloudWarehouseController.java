@@ -4,7 +4,7 @@ import cn.xinghuaerp.common.AjaxResult;
 import cn.xinghuaerp.system.service.BusinessAccessService;
 import org.springframework.security.access.prepost.PreAuthorize;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,7 +24,7 @@ import java.util.Map;
 @RequestMapping("/api/erp-api/ship/cloudWarehouse")
 public class ShipOrderCloudWarehouseController extends BaseController {
 
-    private final OOrderStockingService stockingService;
+    private final OOrderStockingWorkflow stockingService;
     private final BusinessAccessService access;
 
     /**

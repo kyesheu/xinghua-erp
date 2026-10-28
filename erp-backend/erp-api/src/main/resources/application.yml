@@ -54,6 +54,10 @@ spring:
   # Java 侧由 AiOrchestrationService 读取，Python 服务由 PythonAgentClient 经请求头透传。
   # RabbitMQ：订单转入 OMS 后的异步通知链路；erp.mq.enabled=false 时不建连接、不启动监听，本地可无 MQ 运行。
   rabbitmq:
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     host: ${SPRING_RABBITMQ_HOST:127.0.0.1}
     port: ${SPRING_RABBITMQ_PORT:56720}
     username: ${SPRING_RABBITMQ_USERNAME:guest}

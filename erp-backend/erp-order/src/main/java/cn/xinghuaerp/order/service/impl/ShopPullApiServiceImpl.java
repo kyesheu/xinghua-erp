@@ -12,7 +12,7 @@ import tools.jackson.databind.JsonNode;
 import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.common.ResultVo;
 import cn.xinghuaerp.common.api.ShopApiParams;
-import cn.xinghuaerp.platform.service.ShopApiCommon;
+import cn.xinghuaerp.platform.facade.ShopApiCommonFacade;
 import cn.xinghuaerp.order.service.ShopPullApiService;
 import cn.xinghuaerp.open.pdd.PddGoodsApiHelper;
 import cn.xinghuaerp.open.pdd.PddOrderApiHelper;
@@ -58,10 +58,10 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
-import cn.xinghuaerp.product.service.ShopGoodsService;
-import cn.xinghuaerp.system.service.OShopPullLasttimeService;
-import cn.xinghuaerp.system.service.OShopPullLogsService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.product.facade.ShopGoodsFacade;
+import cn.xinghuaerp.system.facade.OShopPullLasttimeFacade;
+import cn.xinghuaerp.system.facade.OShopPullLogsFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import cn.xinghuaerp.order.service.ShopOrderService;
 import cn.xinghuaerp.order.service.ShopRefundService;
 /**
@@ -74,14 +74,14 @@ import cn.xinghuaerp.order.service.ShopRefundService;
 @RequiredArgsConstructor
 public class ShopPullApiServiceImpl implements ShopPullApiService {
 
-    private final ShopApiCommon shopApiCommon;
-    private final OShopService shopService;
+    private final ShopApiCommonFacade shopApiCommon;
+    private final OShopFacade shopService;
     private final ShopOrderService shopOrderService;
     private final ShopRefundService shopRefundService;
-    private final ShopGoodsService shopGoodsService;
+    private final ShopGoodsFacade shopGoodsService;
     private final ShopSyncService shopSyncService;
-    private final OShopPullLogsService pullLogsService;
-    private final OShopPullLasttimeService pullLasttimeService;
+    private final OShopPullLogsFacade pullLogsService;
+    private final OShopPullLasttimeFacade pullLasttimeService;
 
     private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 

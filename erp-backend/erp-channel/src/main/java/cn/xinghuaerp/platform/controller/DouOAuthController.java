@@ -9,8 +9,8 @@ import cn.xinghuaerp.platform.request.PlatformTokenRequest;
 import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.dou.DouTokenApiHelper;
 import cn.xinghuaerp.open.dou.model.Token;
-import cn.xinghuaerp.system.service.OShopPlatformService;
-import cn.xinghuaerp.system.service.OShopService;
+import cn.xinghuaerp.system.facade.OShopPlatformFacade;
+import cn.xinghuaerp.system.facade.OShopFacade;
 import lombok.AllArgsConstructor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -19,8 +19,8 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/oms-api/dou/oauth")
 public class DouOAuthController {
-    private final OShopService shopService;
-    private final OShopPlatformService platformService;
+    private final OShopFacade shopService;
+    private final OShopPlatformFacade platformService;
 
     @PostMapping("/update_token")
     @ResponseBody

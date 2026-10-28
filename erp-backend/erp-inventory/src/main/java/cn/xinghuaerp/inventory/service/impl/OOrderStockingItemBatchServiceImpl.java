@@ -1,4 +1,4 @@
-package cn.xinghuaerp.order.service.impl;
+package cn.xinghuaerp.inventory.service.impl;
 
 import cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch;
 import cn.xinghuaerp.inventory.mapper.OOrderStockingItemBatchMapper;

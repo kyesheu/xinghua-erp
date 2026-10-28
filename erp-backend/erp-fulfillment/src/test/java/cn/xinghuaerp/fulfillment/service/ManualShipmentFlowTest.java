@@ -19,7 +19,7 @@ import cn.xinghuaerp.inventory.service.impl.OGoodsInventoryBatchServiceImpl;
 import cn.xinghuaerp.inventory.service.impl.OGoodsInventoryServiceImpl;
 import cn.xinghuaerp.inventory.service.impl.ErpStockOutItemServiceImpl;
 import cn.xinghuaerp.inventory.service.impl.ErpStockOutServiceImpl;
-import cn.xinghuaerp.order.service.impl.OOrderStockingItemBatchServiceImpl;
+import cn.xinghuaerp.inventory.service.impl.OOrderStockingItemBatchServiceImpl;
 import cn.xinghuaerp.order.service.impl.OOrderStockingItemServiceImpl;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean;
@@ -77,8 +77,8 @@ class ManualShipmentFlowTest {
         var productFacade = new cn.xinghuaerp.product.facade.ProductFacadeImpl(null, null, map(OGoodsSkuMapper.class), null, null);
         shipment = tx(new ManualShipmentService(orderFacade, orderFacade, inventoryFacade, inventoryFacade, inventoryFacade,
                 systemFacade, productFacade));
-        stocking = tx(inject(new OOrderStockingItemServiceImpl(inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade,
-                inventoryFacade), map(OOrderStockingItemMapper.class)));
+        stocking = tx(new OOrderStockingItemServiceImpl(inventoryFacade, inventoryFacade, inventoryFacade, inventoryFacade,
+                inventoryFacade));
         var outItems = inject(new ErpStockOutItemServiceImpl(map(ErpStockOutItemMapper.class)), map(ErpStockOutItemMapper.class));
         var batches = inject(new OGoodsInventoryBatchServiceImpl(), map(OGoodsInventoryBatchMapper.class));
         var inventory = inject(new OGoodsInventoryServiceImpl(), map(OGoodsInventoryMapper.class));

@@ -3,7 +3,7 @@ package cn.xinghuaerp.fulfillment.controller;
 import cn.xinghuaerp.common.AjaxResult;
 import cn.xinghuaerp.system.service.BusinessAccessService;
 import cn.xinghuaerp.system.security.common.BaseController;
-import cn.xinghuaerp.inventory.service.OOrderStockingService;
+import cn.xinghuaerp.inventory.facade.OOrderStockingWorkflow;
 import cn.xinghuaerp.purchase.service.SupplierDispatchService;
 import cn.xinghuaerp.purchase.request.SupplierDispatchRequest;
 import cn.xinghuaerp.purchase.request.SupplierDispatchConfirmRequest;
@@ -27,7 +27,7 @@ import java.util.Map;
 @RequestMapping("/api/erp-api/ship/order")
 public class ShipOrderItemPushController extends BaseController {
 
-    private final OOrderStockingService stockingService;
+    private final OOrderStockingWorkflow stockingService;
     private final SupplierDispatchService dispatchService;
     private final BusinessAccessService access;
 
