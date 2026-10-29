@@ -24,6 +24,15 @@ public class SysMessageServiceImpl implements ISysMessageService {
 
     private final SysMessageMapper mapper;
 
+    /**
+     * 保存一条消息。<b>仅用于新建（{@code id == null}）。</b>
+     *
+     * <p>已有消息的通知状态结算必须走 {@link #finishNotify(Long, int)}：本方法在 id 非空时
+     * 按主键整实体回写（{@code updateById}，默认 NOT_NULL 策略），会把调用方读取时的旧快照里
+     * 所有非空字段（{@code is_read}、{@code title}、{@code content}、{@code dedup_key}、
+     * {@code created_time} …）全部覆盖回数据库。通知推送是阻塞数秒到数十秒的调用，
+     * 期间用户「标记已读」的结果会被整实体回写改回未读，是典型的 lost update。</p>
+     */
     @Override
     public void save(SysMessage msg) {
         if (msg.getCreatedTime() == null) {
@@ -69,12 +78,17 @@ public class SysMessageServiceImpl implements ISysMessageService {
 
     @Override
     public void markRead(Long id) {
-        SysMessage m = mapper.selectById(id);
-        if (m != null) {
-            m.setIsRead(1);
-            m.setReadTime(LocalDateTime.now());
-            mapper.updateById(m);
+        if (id == null) {
+            return;
         }
+        // 只条件更新已读相关的两列，绝不能「selectById 再 updateById」整实体回写：
+        // 回写会把读到那一刻的 notify_status 一起写回去——用户点已读时读到 notify_status=0，
+        // 期间补偿任务把状态推成 3 并结算成 1，整实体回写就把 0 写回，于是这条消息重新落进
+        // getFailedNotify 的 (0,2,3) 补偿窗口，被再投递一次（已读操作造成重复通知）。
+        mapper.update(null, new UpdateWrapper<SysMessage>()
+                .eq("id", id)
+                .set("is_read", 1)
+                .set("read_time", LocalDateTime.now()));
     }
 
     @Override
@@ -105,6 +119,37 @@ public class SysMessageServiceImpl implements ISysMessageService {
                 .eq("notify_status", expected)
                 .set("notify_status", NOTIFY_STATUS_SENDING)
                 .set("notify_time", LocalDateTime.now())) == 1;
+    }
+
+    @Override
+    public boolean finishNotify(Long id, int notifyStatus) {
+        if (id == null) {
+            return false;
+        }
+        // 只结算本次投递：条件更新只 set 两个投递相关列，并带 notify_status = 发送中 的围栏。
+        // 这样既不会覆盖投递期间用户并发写入的 is_read/read_time/title，
+        // 也不会覆盖别人接管租约后写下的结算结果（影响行数为 0）。
+        int rows = mapper.update(null, new UpdateWrapper<SysMessage>()
+                .eq("id", id)
+                .eq("notify_status", NOTIFY_STATUS_SENDING)
+                .set("notify_status", notifyStatus)
+                .set("notify_time", LocalDateTime.now()));
+        if (rows == 1) {
+            return true;
+        }
+        log.warn("通知结果结算未生效（租约已被接管或已结算） id={} target={} current={}",
+                id, notifyStatus, currentNotifyStatus(id));
+        return false;
+    }
+
+    /** 结算失败时读一次现状，仅用于日志定位；读不到或读取异常都不影响主流程。 */
+    private Object currentNotifyStatus(Long id) {
+        try {
+            SysMessage current = mapper.selectById(id);
+            return current == null ? "记录不存在" : current.getNotifyStatus();
+        } catch (RuntimeException ignored) {
+            return "unknown";
+        }
     }
 
     @Override

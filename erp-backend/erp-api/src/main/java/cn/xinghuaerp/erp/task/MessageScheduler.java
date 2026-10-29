@@ -59,7 +59,9 @@ public class MessageScheduler {
                 // 否则两个实例都会读到同一批待补偿消息，导致同一 messageId 重复触达渠道。
                 if(!messageService.claimNotify(msg.getId(),msg.getNotifyStatus()))continue;
                 boolean allOk=notifierService.notifyAll(msg.getTitle(),msg.getContent());
-                msg.setNotifyStatus(allOk?1:2);msg.setNotifyTime(LocalDateTime.now());messageService.save(msg);
+                // 只条件结算本次投递结果，不能对读取时的旧快照调 save：
+                // 推送阻塞期间用户可能已标记已读，整实体回写会把 is_read/read_time/title 覆盖回旧值。
+                messageService.finishNotify(msg.getId(),allOk?1:2);
             } catch(RuntimeException failure) {
                 if(Thread.currentThread().isInterrupted())return;
                 log.warn("消息补偿失败 id={} errorType={}",msg.getId(),failure.getClass().getSimpleName());
@@ -114,11 +116,14 @@ public class MessageScheduler {
         m.setCreatedTime(LocalDateTime.now());
         messageService.save(m);
 
-        if (needNotify) {
-            boolean allOk = notifierService.notifyAll(title, content);
-            m.setNotifyStatus(allOk ? 1 : 2);
-            m.setNotifyTime(LocalDateTime.now());
-            messageService.save(m);
+        if (needNotify && m.getId() != null) {
+            // 先抢占投递权再推送：插入时状态是「待推送」，抢占后才是「发送中」，
+            // 后面才能用 notify_status=发送中 的围栏做条件结算；expectedNotifyStatus=null 即从「待推送」抢占。
+            if (messageService.claimNotify(m.getId(), null)) {
+                boolean allOk = notifierService.notifyAll(title, content);
+                // 同理：新消息在推送期间也可能被用户标记已读，只能条件结算投递结果，不能整实体回写。
+                messageService.finishNotify(m.getId(), allOk ? 1 : 2);
+            }
         }
 
         sseService.broadcastMessage("message", Map.of(

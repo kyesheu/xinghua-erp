@@ -564,7 +564,11 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             // 查商品
             ShopGoodsSku shopGoodsSku = shopGoodsSkuMapper.getShopGoodsSkuById(item.getId());
             if(shopGoodsSku==null) return ResultVo.error("找不到商品数据，id:"+item.getId());
-            if(shopGoodsSku.getShopId()!=shop.getId()) return ResultVo.error("店铺商品不属于你");
+            // 必须用值比较：getShopId()/getId() 都是 Long，`!=` 是引用比较。
+            // Long.valueOf 只缓存 -128~127，店铺 id 超过 127 时两边是不同对象，`!=` 恒为 true，
+            // 于是每个商品项都被判成「店铺商品不属于你」，整个店铺的下单入口直接不可用
+            // （开发环境店铺 id 是个位数，所以一直没暴露）。
+            if(!java.util.Objects.equals(shopGoodsSku.getShopId(), shop.getId())) return ResultVo.error("店铺商品不属于你");
             // 未关联商品库商品sku时不拦截，erpGoodsSkuId记为0，支持快速下单（后续可在订单库中补关联）
             // 组合
             ShopOrderItem orderItem = new ShopOrderItem();
@@ -762,22 +766,36 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             recoveryRecord.setCreatedTime(LocalDateTime.now());
             recoveryRecord.setCreatedBy(man);
 
-            /** 抵扣金额和订单金额对比*/
-            if(orderAmount >= deductionPrice) {
-                // 订单金额 >= 抵扣金额  就是全部抵扣掉了
-                recoveryRecord.setSettlementType(1);//1-仅抵扣，2-仅现金，3-混合
-                recoveryRecord.setDeductedAmount(recoveryRecord.getTotalAmount());
-                recoveryRecord.setRemainingAmount(BigDecimal.valueOf(0.0));
-                recoveryRecord.setStatus(1);
-                recoveryRecord.setSettlementStatus(2);
-            }else{
-                // 剩余抵扣不能用 (只抵扣订单金额部分，剩下的需要继续结算)
-                recoveryRecord.setSettlementType(3);//1-仅抵扣，2-仅现金，3-混合
-                recoveryRecord.setDeductedAmount(BigDecimal.valueOf(shopOrder.getDeductionPrice()).multiply(BigDecimal.valueOf(100)));
-                recoveryRecord.setRemainingAmount(recoveryRecord.getTotalAmount().subtract(recoveryRecord.getDeductedAmount()));
-                recoveryRecord.setStatus(1);
-                recoveryRecord.setSettlementStatus(1);
-            }
+            // 抵扣口径：以「回收价值」和「实际抵扣金额」取小，remaining = 回收价值 - 已抵扣，恒 >= 0。
+            // 原来的 `if(orderAmount >= deductionPrice)` 两条分支各错一个方向：
+            //   ① 全额分支把 deducted 记成回收价值全额 —— 回收 5000、实际只抵扣 1000 时，
+            //      抵扣额虚高 4000 且把 remaining 清零（5000 / 0 / type=1 / status=2）；
+            //   ② 混合分支把 deducted 记成订单金额 —— 回收 100、订单 2000、抵扣 3000 时
+            //      remaining = 100 - 2000 = -1900，出现「客户倒欠平台」的负数。
+            // 单位换算：shop_order.deduction_price 存的是「分」（见本方法上文 paymentAmount = orderAmount - deductionPrice，
+            // orderAmount 同样是分），而 erp_recovery_record.deducted_amount 是 decimal(10,2) 的「元」，
+            // 必须 movePointLeft(2) 换成元（原来写成「分 × 100」，金额放大 10^4 倍）。
+            // 三个算例（回收价值 / 订单金额 / 抵扣金额 → deducted / remaining / type / status）：
+            //   5000 / 2000 / 3000 → 2000 / 3000 / 3 / 1（抵扣取订单金额）
+            //   5000 / 2000 / 1000 → 1000 / 4000 / 3 / 1（抵扣取实际抵扣，剩余继续结算）
+            //   100  / 2000 / 3000 → 100  / 0    / 1 / 2（抵扣取回收价值，不能超过回收价值）
+            BigDecimal recoveryTotal = recoveryRecord.getTotalAmount();                        // 元
+            BigDecimal applied = BigDecimal.valueOf(shopOrder.getDeductionPrice()).movePointLeft(2); // 分 → 元
+            BigDecimal deducted = recoveryTotal.min(applied);
+            BigDecimal remaining = recoveryTotal.subtract(deducted);
+            recoveryRecord.setDeductedAmount(deducted);
+            recoveryRecord.setRemainingAmount(remaining);
+            recoveryRecord.setSettlementType(remaining.signum() == 0 ? 1 : 3);//1-仅抵扣，2-仅现金，3-混合
+            recoveryRecord.setSettlementStatus(remaining.signum() == 0 ? 2 : 1);//2-已结清，1-未结清
+            recoveryRecord.setStatus(1);
+            // TODO(已知差异，本轮不修，根子在支付金额链路)：本方法上文把 shop_order.deduction_price
+            // 截到「订单金额」，没有与回收价值取小，因此下面两种情况下 payment_amount 与回收记录口径不一致：
+            //   ① 回收价值 < 实际抵扣（如 100 / 2000 / 3000）：payment_amount 按抵扣 2000 元算（=0），
+            //      而回收记录只抵了 100 元 —— 客户少付的 1900 元在回收侧没有记录；
+            //   ② 回收价值 = 0 且抵扣 > 0：闸门 `deductionPrice > 0` 仍成立，会落一条
+            //      deducted=0 / remaining=0 / type=1 / status=2 的零值回收记录，而 payment_amount 仍按抵扣额算。
+            // 不能简单在闸门里加 `recoveryTotal > 0` 把 ②挡掉——那会变成「钱少收了但没有任何记录」，
+            // 比留一条零值记录更难对账。需要连同支付金额链路一起由产品定规则后再改，不要只改一边。
 
             // 插入回收记录
             recoveryRecordMapper.insert(recoveryRecord);
@@ -785,7 +803,8 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             ErpRecoveryDeduction erpRecoveryDeduction = new ErpRecoveryDeduction();
             erpRecoveryDeduction.setOrderId(shopOrder.getId());
             erpRecoveryDeduction.setRecoveryId(recoveryRecord.getId());
-            erpRecoveryDeduction.setDeductionAmount(BigDecimal.valueOf(shopOrder.getDeductionPrice()).multiply(BigDecimal.valueOf(100)));
+            // 同一笔抵扣，两张表必须对得上：直接复用上面算好的 deducted（元），不再各自换算。
+            erpRecoveryDeduction.setDeductionAmount(deducted);
             erpRecoveryDeduction.setDeductionTime(LocalDateTime.now());
             erpRecoveryDeduction.setCreatedBy(man);
             recoveryDeductionMapper.insert(erpRecoveryDeduction);
@@ -923,7 +942,11 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             ErpRecoveryDeduction erpRecoveryDeduction = new ErpRecoveryDeduction();
             erpRecoveryDeduction.setOrderId(shopOrder.getId());
             erpRecoveryDeduction.setRecoveryId(order.getRecoveryId());
-            erpRecoveryDeduction.setDeductionAmount(order.getRecoveryDeductionAmount().multiply(BigDecimal.valueOf(100)));
+            // 同上（与 createOrder 同一根因、同一种错法）：入参 recoveryDeductionAmount 本身是「元」
+            // （见上文 865 行：它 ×100 才得到 shop_order.deduction_price 的「分」），
+            // 而 erp_recovery_deduction.deduction_amount 就是 decimal(10,2) 的「元」，
+            // 再乘 100 会把金额写成真实金额的 100 倍（注意：createOrder 那两处是「分再乘 100」，放大 10^4 倍）。
+            erpRecoveryDeduction.setDeductionAmount(order.getRecoveryDeductionAmount());
             erpRecoveryDeduction.setDeductionTime(LocalDateTime.now());
             erpRecoveryDeduction.setCreatedBy(man);
             recoveryDeductionMapper.insert(erpRecoveryDeduction);

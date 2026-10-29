@@ -3,6 +3,7 @@ from typing import TypedDict
 from contextlib import closing, contextmanager, nullcontext
 from pathlib import Path
 import sqlite3
+import time
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -43,16 +44,35 @@ def _sqlite_review_lock(path: str):
 
 
 def _prepare_checkpoint_db(path: str) -> None:
-    """
-    在持有锁的情况下先把检查点库切成 WAL 并建好表。
-    首次创建时 PRAGMA journal_mode=WAL 需要独占访问，若留给 SqliteSaver 的懒加载 setup 去做，
-    多进程场景下后到的连接可能拿到只读句柄并抛「attempt to write a readonly database」。
-    预先执行后，Saver 内部的同名 PRAGMA 变成幂等操作。
-    """
+    """在持有文件锁的前提下确认检查点库处于 WAL 且可用。"""
     with closing(sqlite3.connect(path, timeout=30)) as conn:
-        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA busy_timeout=30000")
+        # 先读后写：已经是 WAL 就不要再执行切换。
+        # 切库要拿数据库文件的写锁，而 busy_timeout 只对 SQLITE_BUSY 重试——
+        # Windows 上另一进程的句柄/-wal/-shm 正在收尾时返回的是 SQLITE_READONLY，
+        # 这里等多久都不会重试。四个进程里只有首个创建者真正需要切库，
+        # 后到的三个如果照旧无脑切一次，等于每次都主动去撞那个窗口。
+        mode = conn.execute("PRAGMA journal_mode").fetchone()
+        if not mode or str(mode[0]).lower() != "wal":
+            _switch_to_wal(conn)
         conn.commit()
+
+
+def _switch_to_wal(conn) -> None:
+    """首次建库才会走到这里。READONLY/LOCKED/BUSY 属于句柄交接的瞬时状态，做有界重试。"""
+    last = None
+    for attempt in range(1, 6):
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as exc:
+            text = str(exc).lower()
+            # 只吞「瞬时争用」这三类；权限、损坏、磁盘错误必须原样上抛，不能把真故障藏起来。
+            if "readonly" not in text and "locked" not in text and "busy" not in text:
+                raise
+            last = exc
+            time.sleep(0.05 * attempt)
+    raise last
 
 
 
