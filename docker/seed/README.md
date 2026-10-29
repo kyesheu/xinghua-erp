@@ -8,15 +8,16 @@
 | --- | --- |
 | `01-base.sql` | 账号、商户、店铺、供应商、仓库、商品、SKU 及基础库存 |
 | `02-txn.sql` | 采购、出入库、订单、售后及财务单据 |
-| `03-supplement.sql` | 补充业务资料及页面所需配置 |
+| `03-fixup.sql` | 补充业务资料及页面所需配置 |
 | `04-oms.sql` | 店铺商品、平台订单、售后与发货任务 |
+| `05-inventory-batch.sql` | 库存批次明细；按库存量拆分，保证各库存批次合计等于库存数量 |
 
-须先完成[基础数据库初始化](../README.md)，再按 `01 → 02 → 03 → 04` 导入。脚本包含清理和覆盖示例数据的语句，只能用于可重置的本地演示库；不要导入已有真实业务数据的数据库。
+须先完成[基础数据库初始化](../README.md)，再按 `01 → 02 → 03 → 04 → 05` 导入。脚本包含清理和覆盖示例数据的语句，只能用于可重置的本地演示库；不要导入已有真实业务数据的数据库。
 
 在项目根目录可使用 PowerShell 逐文件导入：
 
 ```powershell
-$seedFiles = @('01-base.sql', '02-txn.sql', '03-supplement.sql', '04-oms.sql')
+$seedFiles = @('01-base.sql', '02-txn.sql', '03-fixup.sql', '04-oms.sql', '05-inventory-batch.sql')
 foreach ($seedFile in $seedFiles) {
     Get-Content -Raw -Encoding utf8 (Join-Path 'docker/seed' $seedFile) |
         docker exec -i xinghua-erp-mysql-1 sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot --default-character-set=utf8mb4 --database=xinghua-erp'

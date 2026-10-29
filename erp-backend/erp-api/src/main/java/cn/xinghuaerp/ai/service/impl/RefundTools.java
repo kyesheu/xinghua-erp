@@ -28,6 +28,7 @@ public class RefundTools {
         if (days == null || days <= 0) days = 30;
         days = Math.min(days, 90);
         if (limit == null || limit <= 0) limit = 200;
+        limit = Math.min(limit, 300);
 
         LambdaQueryWrapper<ShopRefund> wrapper = new LambdaQueryWrapper<>();
         java.util.Objects.requireNonNull(scope, "缺少数据范围");
@@ -40,6 +41,8 @@ public class RefundTools {
         if (goodsName != null && !goodsName.isBlank()) {
             wrapper.like(ShopRefund::getGoodsName, goodsName);
         }
+        // 先取匹配总数再取样本，避免把 limit 截断后的条数当成退款总量交给模型。
+        long total = refundService.count(wrapper);
         wrapper.orderByDesc(ShopRefund::getCreateOn);
         wrapper.last("LIMIT " + limit);
         List<ShopRefund> list = refundService.list(wrapper);
@@ -49,7 +52,12 @@ public class RefundTools {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("共 ").append(list.size()).append(" 条退款记录（近").append(days).append("天）：\n");
+        sb.append("共 ").append(total).append(" 条退款记录（近").append(days).append("天）");
+        if (total > list.size()) {
+            sb.append("，下列仅为按申请时间倒序的前 ").append(list.size())
+                    .append(" 条，不是全部退款记录，回答时不要把它当作退款总量");
+        }
+        sb.append("：\n");
         sb.append("| 商品名 | 退款原因 | 退款金额(分) | 申请时间 | 售后状态 |\n");
         sb.append("|--------|---------|-------------|---------|---------|\n");
         for (ShopRefund r : list) {

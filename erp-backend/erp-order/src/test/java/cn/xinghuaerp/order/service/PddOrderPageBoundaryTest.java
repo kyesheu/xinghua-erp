@@ -1,4 +1,6 @@
 package cn.xinghuaerp.order.service;
+
+import cn.xinghuaerp.order.service.impl.PlatformPullGuard;
 import cn.xinghuaerp.order.service.impl.ShopPullApiServiceImpl;
 import cn.xinghuaerp.platform.facade.ShopApiCommonFacade;
 import cn.xinghuaerp.system.facade.*;
@@ -16,7 +18,7 @@ class PddOrderPageBoundaryTest {
   var api=mock(ShopApiCommonFacade.class);var shops=mock(OShopFacade.class);var logs=mock(OShopPullLogsFacade.class);
   var shop=new OShop();shop.setId(1L);shop.setType(300);shop.setMerchantId(7L);when(shops.getById(1L)).thenReturn(shop);
   when(api.checkBefore(1L,300)).thenReturn(ResultVo.success(new ShopApiParams()));
-  var service=new ShopPullApiServiceImpl(api,shops,null,null,null,null,logs,null);
+  var service=new ShopPullApiServiceImpl(api,shops,null,null,null,null,logs,null,new PlatformPullGuard());
   try(var platform=mockStatic(PddOrderApiHelper.class)) {
    platform.when(()->PddOrderApiHelper.pullOrderList(isNull(),isNull(),isNull(),anyInt(),anyInt(),eq(1),eq(100)))
        .thenReturn(ApiResultVo.success(new OrderListResultVo(true,java.util.List.of())));

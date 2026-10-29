@@ -58,8 +58,13 @@ public class GoodsTools {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("共找到 ").append(list.size()).append(" 个SKU：\n");
-        for (int i = 0; i < list.size(); i++) {
+        int shown = Math.min(list.size(), 20);
+        sb.append("共找到 ").append(list.size()).append(" 个SKU");
+        if (list.size() > shown) {
+            sb.append("，下列仅列出前 ").append(shown).append(" 条，请缩小关键词再查询");
+        }
+        sb.append("：\n");
+        for (int i = 0; i < shown; i++) {
             OGoodsSku sku = list.get(i);
             sb.append(i + 1).append(". ").append(sku.getGoodsName() != null ? sku.getGoodsName() : "");
             sb.append(" > ").append(sku.getSkuName() != null ? sku.getSkuName() : "");

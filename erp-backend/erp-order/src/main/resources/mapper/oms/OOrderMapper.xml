@@ -93,7 +93,7 @@
         FROM
             o_order
         WHERE 1=1
-        <if test="merchantId!=null">
+        <if test="merchantId!=null and merchantId &gt; 0">
             and merchant_id = #{merchantId}
         </if>
         <if test="shopId!=null">
@@ -114,7 +114,7 @@
 
         where  order_status=1
 
-        <if test="merchantId!=null">
+        <if test="merchantId!=null and merchantId &gt; 0">
             and merchant_id = #{merchantId}
         </if>
         GROUP BY shop_type
@@ -129,7 +129,7 @@
             o_order
 
         WHERE DATE(`order_time`) = CURDATE()
-        <if test="merchantId!=null">
+        <if test="merchantId!=null and merchantId &gt; 0">
             and merchant_id = #{merchantId}
         </if>
     </select>
@@ -140,7 +140,7 @@
         FROM
             o_order as o
         WHERE o.order_status=1
-        <if test="merchantId!=null">
+        <if test="merchantId!=null and merchantId &gt; 0">
             and o.merchant_id = #{merchantId}
         </if>
     </select>

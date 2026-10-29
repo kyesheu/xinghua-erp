@@ -7491,7 +7491,7 @@ CREATE TABLE `sys_message` (
   `source` varchar(50) DEFAULT 'system' COMMENT '来源：ai/system',
   `is_read` int DEFAULT 0 COMMENT '是否已读：0未读 1已读',
   `need_notify` tinyint(1) DEFAULT 0 COMMENT '是否需要外部通知：0否 1是',
-  `notify_status` tinyint DEFAULT 0 COMMENT '外部通知状态：0未推送 1已推送 2推送失败',
+  `notify_status` tinyint DEFAULT 0 COMMENT '外部通知状态：0未推送 1已推送 2推送失败 3发送中（已被某实例抢占，用于多实例去重）',
   `notify_time` datetime DEFAULT NULL COMMENT '最近一次外部推送时间',
   `created_time` datetime DEFAULT NULL,
   `read_time` datetime DEFAULT NULL,

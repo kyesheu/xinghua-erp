@@ -265,8 +265,8 @@ public class AiBriefService {
      */
     private Map<String, Object> getTodayData() {
         Long shopCount = shopService.count();
-        SalesDailyVo todaySales = orderService.getTodaySalesDaily(0L);
-        Number waitShip = orderService.getWaitShipOrderAllCount(0L);
+        SalesDailyVo todaySales = orderService.getTodaySalesDaily(null);
+        Number waitShip = orderService.getWaitShipOrderAllCount(null);
 
         var data=new LinkedHashMap<String,Object>();
         data.put("salesVolume",todaySales==null?null:todaySales.getAmount());

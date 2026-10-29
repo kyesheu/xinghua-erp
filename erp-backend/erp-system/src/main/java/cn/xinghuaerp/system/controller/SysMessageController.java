@@ -47,6 +47,8 @@ public class SysMessageController {
         List<SysMessage> failed = messageService.getFailedNotify();
         int success = 0;
         for (SysMessage msg : failed) {
+            // 与定时补偿共用同一把幂等闸门：抢不到投递权说明别的实例/线程正在发送，直接跳过。
+            if (!messageService.claimNotify(msg.getId(), msg.getNotifyStatus())) continue;
             boolean allOk = notifierService.notifyAll(msg.getTitle(), msg.getContent());
             msg.setNotifyStatus(allOk ? 1 : 2);
             msg.setNotifyTime(LocalDateTime.now());

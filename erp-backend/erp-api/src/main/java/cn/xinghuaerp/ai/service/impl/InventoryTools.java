@@ -22,6 +22,7 @@ public class InventoryTools {
             Integer availableLte,
             Integer limit, cn.xinghuaerp.system.service.BusinessSubjectScopeService.Scope scope) {
         if (limit == null || limit <= 0) limit = 100;
+        limit = Math.min(limit, 200);
 
         LambdaQueryWrapper<OGoodsInventory> wrapper = new LambdaQueryWrapper<>();
         java.util.Objects.requireNonNull(scope, "缺少数据范围");
@@ -43,6 +44,8 @@ public class InventoryTools {
         if (availableLte != null) {
             wrapper.le(OGoodsInventory::getAvailableQuantity, availableLte);
         }
+        // 先取匹配总数，再取样本；否则 limit 截断后的条数会被模型当成全量总数。
+        long total = inventoryService.count(wrapper);
         wrapper.orderByAsc(OGoodsInventory::getAvailableQuantity);
         wrapper.last("LIMIT " + limit);
         List<OGoodsInventory> list = inventoryService.list(wrapper);
@@ -52,7 +55,12 @@ public class InventoryTools {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("共 ").append(list.size()).append(" 条库存记录：\n");
+        sb.append("共 ").append(total).append(" 条匹配记录");
+        if (total > list.size()) {
+            sb.append("，下列仅为按可用库存从低到高排列的前 ").append(list.size())
+                    .append(" 条，不是全部记录，回答时不要把它当作全部库存");
+        }
+        sb.append("：\n");
         sb.append("| SKU名称 | 编码 | 可用库存 | 仓库ID |\n");
         sb.append("|---------|------|---------|-------|\n");
         for (OGoodsInventory inv : list) {

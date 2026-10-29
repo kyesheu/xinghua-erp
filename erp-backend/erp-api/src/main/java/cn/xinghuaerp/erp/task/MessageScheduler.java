@@ -55,6 +55,9 @@ public class MessageScheduler {
         for (SysMessage msg : failed) {
             if(Thread.currentThread().isInterrupted())return;
             try {
+                // 多实例并发：先抢占投递权（条件更新，影响行数=1 才算抢到），
+                // 否则两个实例都会读到同一批待补偿消息，导致同一 messageId 重复触达渠道。
+                if(!messageService.claimNotify(msg.getId(),msg.getNotifyStatus()))continue;
                 boolean allOk=notifierService.notifyAll(msg.getTitle(),msg.getContent());
                 msg.setNotifyStatus(allOk?1:2);msg.setNotifyTime(LocalDateTime.now());messageService.save(msg);
             } catch(RuntimeException failure) {
@@ -66,13 +69,13 @@ public class MessageScheduler {
     }
 
     private void checkSalesZero() {
-        SalesDailyVo today = orderService.getTodaySalesDaily(0L);
+        SalesDailyVo today = orderService.getTodaySalesDaily(null);
         if (today != null && today.getAmount() != null && today.getAmount() > 0) return;
         save("sales_zero", "high", "今日销售额为零", "今日暂无销售额，请检查运营情况", "/sale/shop_order_list", "system");
     }
 
     private void checkShipPending() {
-        Integer count = orderService.getWaitShipOrderAllCount(0L);
+        Integer count = orderService.getWaitShipOrderAllCount(null);
         if (count == null || count < 50) return;
         save("ship_pending", "medium", "发货积压提醒", "待发货订单" + count + "单，请尽快安排发货", "/sale/shop_order_list", "system");
     }

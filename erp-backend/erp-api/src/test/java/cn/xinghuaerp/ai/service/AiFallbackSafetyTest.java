@@ -15,8 +15,8 @@ class AiFallbackSafetyTest {
         assertTrue(result.contains("有权限的业务页面"));verifyNoInteractions(orders,inventory,refunds);
     }
     @Test void failedFactsAreNotPresentedAsZeroOrNoOrders() {
-        var orders=mock(OOrderService.class);when(orders.getTodaySalesDaily(0L)).thenThrow(new IllegalStateException("offline"));
-        when(orders.getWaitShipOrderAllCount(0L)).thenThrow(new IllegalStateException("offline"));
+        var orders=mock(OOrderService.class);when(orders.getTodaySalesDaily(null)).thenThrow(new IllegalStateException("offline"));
+        when(orders.getWaitShipOrderAllCount(null)).thenThrow(new IllegalStateException("offline"));
         when(orders.salesDaily()).thenThrow(new IllegalStateException("offline"));
         var permissions=mock(cn.xinghuaerp.system.service.AiAgentPermissionService.class);
         when(permissions.allows(anyLong(),anyString())).thenReturn(true);

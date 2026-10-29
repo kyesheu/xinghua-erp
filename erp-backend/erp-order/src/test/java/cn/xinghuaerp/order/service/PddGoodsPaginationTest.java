@@ -1,4 +1,6 @@
 package cn.xinghuaerp.order.service;
+
+import cn.xinghuaerp.order.service.impl.PlatformPullGuard;
 import cn.xinghuaerp.order.service.impl.ShopPullApiServiceImpl;
 import cn.xinghuaerp.platform.facade.ShopApiCommonFacade;
 import cn.xinghuaerp.system.facade.*;
@@ -19,7 +21,7 @@ class PddGoodsPaginationTest {
   var shop=new OShop();shop.setId(1L);shop.setType(300);shop.setMerchantId(7L);when(shops.getById(1L)).thenReturn(shop);
   var config=new ShopApiParams();config.setAppKey("offline");config.setAppSecret("offline");config.setAccessToken("offline");when(api.checkBefore(1L,300)).thenReturn(ResultVo.success(config));
   when(times.advance(eq(1L),eq("GOODS"),any())).thenReturn(true);
-  var service=new ShopPullApiServiceImpl(api,shops,null,null,goods,null,logs,times);
+  var service=new ShopPullApiServiceImpl(api,shops,null,null,goods,null,logs,times,new PlatformPullGuard());
   var item=new Goods();item.setGoodsId(1L);item.setSkuList(List.of());when(goods.savePddGoods(any(),eq(1L))).thenReturn(ResultVo.success(1L));
   try(var platform=mockStatic(PddGoodsApiHelper.class)) {
    platform.when(()->PddGoodsApiHelper.pullGoodsList("offline","offline","offline",1,20)).thenReturn(ApiResultVo.success(new GoodsResultVo(21,Collections.nCopies(20,item))));

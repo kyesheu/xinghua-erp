@@ -82,6 +82,7 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     private final ShopSyncService shopSyncService;
     private final OShopPullLogsFacade pullLogsService;
     private final OShopPullLasttimeFacade pullLasttimeService;
+    private final PlatformPullGuard pullGuard;
 
     private static final DateTimeFormatter DT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -91,14 +92,19 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     public ResultVo<String> pullOrder(Long shopId, String startTime, String endTime) {
         OShop shop = getShop(shopId); if (shop == null) return ResultVo.error("店铺不存在");
         if (!StringUtils.hasText(startTime)) return ResultVo.error("请选择订单日期");
-        long begin = System.currentTimeMillis();
-        return switch (shop.getType()) {
+        if (!pullGuard.tryBegin(shopId, "ORDER")) return ResultVo.error(1801, "该店铺订单正在拉取中，请等本次结束后再试，避免重复占用平台调用额度");
+        try {
+            long begin = System.currentTimeMillis();
+            return switch (shop.getType()) {
             case 300 -> pullPddOrder(shop, startTime, endTime, begin);
             case 100 -> pullTaoOrder(shop, startTime, endTime, begin);
             case 200 -> pullJdOrder(shop, startTime, endTime, begin);
             case 400 -> pullDouOrder(shop, startTime, endTime, begin);
             default -> ResultVo.error("该平台(" + shop.getType() + ")订单拉取待实现");
-        };
+            };
+        } finally {
+            pullGuard.end(shopId, "ORDER");
+        }
     }
     @Override
     public ResultVo<String> pullOrderDetail(Long shopId, String orderId) {
@@ -116,14 +122,19 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     @Override
     public ResultVo<String> pullRefund(Long shopId) {
         OShop shop = getShop(shopId); if (shop == null) return ResultVo.error("店铺不存在");
-        long begin = System.currentTimeMillis();
-        return switch (shop.getType()) {
-            case 300 -> pullPddRefund(shop, begin);
-            case 100 -> pullTaoRefund(shop, begin);
-            case 200 -> pullJdRefund(shop, begin);
-            case 400 -> pullDouRefund(shop, begin);
-            default -> ResultVo.error("该平台售后拉取待实现");
-        };
+        if (!pullGuard.tryBegin(shopId, "REFUND")) return ResultVo.error(1801, "该店铺售后正在拉取中，请等本次结束后再试，避免重复占用平台调用额度");
+        try {
+            long begin = System.currentTimeMillis();
+            return switch (shop.getType()) {
+                case 300 -> pullPddRefund(shop, begin);
+                case 100 -> pullTaoRefund(shop, begin);
+                case 200 -> pullJdRefund(shop, begin);
+                case 400 -> pullDouRefund(shop, begin);
+                default -> ResultVo.error("该平台售后拉取待实现");
+            };
+        } finally {
+            pullGuard.end(shopId, "REFUND");
+        }
     }
     @Override
     public ResultVo<String> pullRefundDetail(Long shopId, String afterId) {
@@ -141,14 +152,19 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     @Override
     public ResultVo<String> pullGoods(Long shopId, Integer pullType) {
         OShop shop = getShop(shopId); if (shop == null) return ResultVo.error("店铺不存在");
-        long begin = System.currentTimeMillis();
-        return switch (shop.getType()) {
-            case 300 -> pullPddGoods(shop, pullType == null ? 0 : pullType, begin);
-            case 100 -> pullTaoGoods(shop, begin);
-            case 200 -> pullJdGoods(shop, begin);
-            case 400 -> pullDouGoods(shop, begin);
-            default -> ResultVo.error("该平台商品拉取待实现");
-        };
+        if (!pullGuard.tryBegin(shopId, "GOODS")) return ResultVo.error(1801, "该店铺商品正在拉取中，请等本次结束后再试，避免重复占用平台调用额度");
+        try {
+            long begin = System.currentTimeMillis();
+            return switch (shop.getType()) {
+                case 300 -> pullPddGoods(shop, pullType == null ? 0 : pullType, begin);
+                case 100 -> pullTaoGoods(shop, begin);
+                case 200 -> pullJdGoods(shop, begin);
+                case 400 -> pullDouGoods(shop, begin);
+                default -> ResultVo.error("该平台商品拉取待实现");
+            };
+        } finally {
+            pullGuard.end(shopId, "GOODS");
+        }
     }
 
     // ======================== PDD ========================
@@ -578,15 +594,10 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     private ResultVo<String> pullJdRefundDetail(OShop shop, String afterId, long begin) {
         var p = chk(shop, 200); if (p == null) return err(shop, "REFUND", "校验失败", begin);
         try {
-            var r = JdAfterSaleApiHelper.pullAfterSaleList(Long.parseLong(p.getSellerId()), null, null, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
-            if (r.getCode() != 0 || r.getList() == null) return errLog(shop, "REFUND", r.getMsg(), "{afterId:" + afterId + "}", begin);
-            // JD售后详情没有独立接口，通过列表按serviceId/applyId过滤
-            AfterSale found = null;
-            for (var rf : r.getList()) {
-                if (rf.getServiceId() != null && afterId.equals(rf.getServiceId().toString())) { found = rf; break; }
-                if (rf.getApplyId() != null && afterId.equals(rf.getApplyId().toString())) { found = rf; break; }
-            }
-            if (found == null) return ResultVo.error("未找到售后单");
+            // JD售后详情没有独立接口，按近90天窗口分页扫描服务端定位（见 pullAfterSaleById）
+            var r = JdAfterSaleApiHelper.pullAfterSaleById(Long.parseLong(p.getSellerId()), afterId, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
+            if (r.getCode() != 0 || r.getData() == null) return errLog(shop, "REFUND", r.getMsg(), "{afterId:" + afterId + "}", begin);
+            var found = r.getData();
             var rr = shopRefundService.saveRefund(shop.getId(), jdRefund(found));
             if (rr.getData() != null) shopSyncService.syncRefund(rr.getData());
             logMsg(shop, "REFUND", "{afterId:" + afterId + "}", "{}", begin);
@@ -633,7 +644,8 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         String pp = "{st:" + s.format(DT) + "}";
         try {
             int ins=0,upd=0,fail=0,seen=0;boolean complete=false;
-            for(int page=1;page<=500;page++) {
+            // 抖店 order.searchList 的 page 从 0 开始（官方文档：默认值为0，第一页下标从0开始）
+            for(int page=0;page<500;page++) {
                 if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"ORDER","拉取取消或超时，尚未完成",begin);
                 var r=DouOrderApiHelper.pullOrderList(s.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, e.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, page, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
                 if(r==null || r.getCode()!=0 || r.getList()==null)return err(shop,"ORDER","分页查询失败，尚未完成",begin);
@@ -726,7 +738,8 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         String pp = "{st:" + st.format(DT) + "}";
         try {
             int ins=0,fail=0,seen=0;boolean complete=false;
-            for(int page=1;page<=500;page++) {
+            // 抖店售后列表同样 0 基页码，与 order.searchList 一致
+            for(int page=0;page<500;page++) {
                 if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"REFUND","拉取取消或超时，尚未完成",begin);
                 var r=DouRefundApiHelper.pullAfterSaleList(st.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, et.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, page, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
                 if(r==null || r.getCode()!=0 || r.getList()==null)return err(shop,"REFUND","分页查询失败，尚未完成",begin);

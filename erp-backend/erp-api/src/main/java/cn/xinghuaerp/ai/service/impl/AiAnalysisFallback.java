@@ -46,10 +46,10 @@ public class AiAnalysisFallback {
 
         md.append("### 今日概况\n\n");
         md.append("| 指标 | 数值 |\n| --- | --- |\n");
-        SalesDailyVo today = salesAllowed ? safe(() -> orderService.getTodaySalesDaily(0L)) : null;
+        SalesDailyVo today = salesAllowed ? safe(() -> orderService.getTodaySalesDaily(null)) : null;
         md.append("| 今日销售额 | ").append(today != null && today.getAmount() != null ? today.getAmount() : "不可用").append(" 元 |\n");
         md.append("| 今日订单数 | ").append(today != null && today.getCount() != null ? today.getCount() : "不可用").append(" 单 |\n");
-        Integer waitShip = salesAllowed ? safe(() -> orderService.getWaitShipOrderAllCount(0L)) : null;
+        Integer waitShip = salesAllowed ? safe(() -> orderService.getWaitShipOrderAllCount(null)) : null;
         md.append("| 待发货订单 | ").append(waitShip == null ? "不可用" : waitShip).append(" 单 |\n\n");
 
         switch (analysisType == null ? "" : analysisType) {

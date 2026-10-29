@@ -31,8 +31,11 @@ public class TaoOrderApiHelper {
             ",alipay_no,buyer_alipay_no,buyer_email,num_iid,num,price,total_fee,adjust_fee,post_fee,discount_fee,payment,received_payment" +
             ",available_confirm_fee,commission_fee,oaid,promotion_details,tmall_coupon_fee,logistics_infos,LogisticsInfos,logistics_company,invoice_no,is_sh_ship";
 
+    /** 单次拉取最多翻这么多页，防止 has_next 恒为 true 时无限调用平台接口 */
+    private static final int MAX_PAGE = 500;
+
     public static ApiResultVo<TaoOrderListResponse> pullOrderList(LocalDateTime startModified, LocalDateTime endModified , String appKey, String appSecret, String sessionKey) throws IOException {
-        Integer pageNo = 1;
+        int pageNo = 1;
         String resultString = pullOrderList(startModified, endModified, pageNo, appKey, appSecret, sessionKey);
         if (!StringUtils.hasText(resultString))
             return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(), "签名发生错误");
@@ -41,50 +44,49 @@ public class TaoOrderApiHelper {
         JsonNode result = JsonUtils.readTree(resultString);
         if (result.get("error_response") == null) {
             //没有错误
+            // 注意：翻页与首页用的是同一个 method（taobao.trades.sold.get），响应节点固定为 trades_sold_get_response；
+            // 只有 taobao.trades.sold.increment.get 才返回 trades_sold_increment_get_response。
             JsonNode dataResult = JsonUtils.node(result, "trades_sold_get_response");
-            Boolean hasNext = JsonUtils.bool(dataResult, "has_next");
-            JsonNode orderListResult = JsonUtils.node(dataResult, "trades");
+            if (dataResult == null) {
+                return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(), "响应缺少 trades_sold_get_response 节点，请核对接口返回");
+            }
             //组合的订单列表
             List<TaoOrderListResponse> tradeBeans = new ArrayList<>();
-            if (orderListResult != null) {
-                for (Object item : JsonUtils.node(orderListResult, "trade")) {
+            boolean hasNext = Boolean.TRUE.equals(JsonUtils.bool(dataResult, "has_next"));
+            appendTrades(dataResult, tradeBeans);
 
-                    TaoOrderListResponse tradeBean = JsonUtils.readValue(item.toString(), TaoOrderListResponse.class);
-                    // 转换orders
-                    JsonNode s = (JsonNode) item;
-                    JsonNode ss = JsonUtils.node(s, "orders");
-                    List<TaoOrderItem> orders = JsonUtils.readList(ss.get("order").toString(), TaoOrderItem.class);
-                    tradeBean.setOrders(orders);
-                    tradeBeans.add(tradeBean);
+            //循环取下一页
+            while (hasNext) {
+                if (pageNo >= MAX_PAGE) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "订单分页达到上限（" + MAX_PAGE + "页）仍未取完，请缩小时间范围后重试");
                 }
-                //循环取下一页
-                while (hasNext) {
-                    pageNo++;
-                    String resultString1 = pullOrderList(startModified, endModified, pageNo, appKey, appSecret, sessionKey);
-                    JsonNode result1 = JsonUtils.readTree(resultString1);
-                    //没有错误
-                    JsonNode dataResult1 = JsonUtils.node(result1, "trades_sold_increment_get_response");
-                    hasNext = JsonUtils.bool(dataResult1, "has_next");
-                    JsonNode orderListResult1 = JsonUtils.node(dataResult1, "trades");
-                    if (orderListResult1 != null) {
-                        for (Object item : JsonUtils.node(orderListResult1, "trade")) {
-//                            String s = JsonNode.toJSONString(item);
-                            TaoOrderListResponse tradeBean = JsonUtils.readValue(JsonUtils.write(item), TaoOrderListResponse.class);
-                            // 转换orders
-                            JsonNode s = (JsonNode) item;
-                            JsonNode ss = JsonUtils.node(s, "orders");
-                            List<TaoOrderItem> orders = JsonUtils.readList(ss.get("order").toString(), TaoOrderItem.class);
-                            tradeBean.setOrders(orders);
-                            tradeBeans.add(tradeBean);
-                        }
-                    }
+                pageNo++;
+                String resultString1 = pullOrderList(startModified, endModified, pageNo, appKey, appSecret, sessionKey);
+                if (!StringUtils.hasText(resultString1)) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "第" + pageNo + "页请求失败，订单拉取不完整，请重试");
                 }
-//                return new PullResult(tradeBeans.size(), tradeBeans);
-                return ApiResultVo.success(tradeBeans.size(), tradeBeans);
-            } else {
-//                return new PullResult(0, tradeBeans);
-                return ApiResultVo.success(0, tradeBeans);
+                JsonNode result1 = JsonUtils.readTree(resultString1);
+                if (result1.get("error_response") != null) {
+                    return ApiResultVo.error(ApiResultVoEnum.ParamsError.getIndex(),
+                            "第" + pageNo + "页返回错误：" + JsonUtils.text(JsonUtils.node(result1, "error_response"), "sub_msg"));
+                }
+                JsonNode dataResult1 = JsonUtils.node(result1, "trades_sold_get_response");
+                if (dataResult1 == null) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "第" + pageNo + "页响应缺少 trades_sold_get_response 节点，订单拉取不完整");
+                }
+                hasNext = Boolean.TRUE.equals(JsonUtils.bool(dataResult1, "has_next"));
+                int before = tradeBeans.size();
+                appendTrades(dataResult1, tradeBeans);
+                if (tradeBeans.size() == before && hasNext) {
+                    // 声明还有下一页但本页为空，继续翻只会空转，直接判为不完整
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "第" + pageNo + "页为空但仍声明下一页（has_next=true），订单拉取不完整，请核对");
+                }
             }
+            return ApiResultVo.success(tradeBeans.size(), tradeBeans);
 
         } else {
             // 有错误
@@ -101,6 +103,24 @@ public class TaoOrderApiHelper {
             }
         }
 
+    }
+
+    /**
+     * 把一页响应里的 trade 列表追加到 out，首页与翻页共用，避免两处解析逻辑漂移。
+     */
+    private static void appendTrades(JsonNode dataResult, List<TaoOrderListResponse> out) {
+        JsonNode trades = JsonUtils.node(dataResult, "trades");
+        if (trades == null) return;
+        for (Object item : JsonUtils.node(trades, "trade")) {
+            TaoOrderListResponse tradeBean = JsonUtils.readValue(item.toString(), TaoOrderListResponse.class);
+            JsonNode s = (JsonNode) item;
+            JsonNode ss = JsonUtils.node(s, "orders");
+            if (ss != null && ss.get("order") != null) {
+                List<TaoOrderItem> orders = JsonUtils.readList(ss.get("order").toString(), TaoOrderItem.class);
+                tradeBean.setOrders(orders);
+            }
+            out.add(tradeBean);
+        }
     }
 
     protected static String pullOrderList(LocalDateTime startModified,LocalDateTime endModified,Integer pageNo,String appKey, String appSecret, String sessionKey) throws IOException {
@@ -161,49 +181,42 @@ public class TaoOrderApiHelper {
         if (result.get("error_response") == null) {
             //没有错误
             JsonNode dataResult = JsonUtils.node(result, "trades_sold_increment_get_response");
-            Boolean hasNext = JsonUtils.bool(dataResult, "has_next");
-            JsonNode orderListResult = JsonUtils.node(dataResult, "trades");
-            //组合的订单列表
-            List<TaoOrderListResponse> tradeBeans = new ArrayList<>();
-            if (orderListResult != null) {
-                for (Object item : JsonUtils.node(orderListResult, "trade")) {
-
-                    TaoOrderListResponse tradeBean = JsonUtils.readValue(item.toString(), TaoOrderListResponse.class);
-                    // 转换orders
-                    JsonNode s = (JsonNode) item;
-                    JsonNode ss = JsonUtils.node(s, "orders");
-                    List<TaoOrderItem> orders = JsonUtils.readList(ss.get("order").toString(), TaoOrderItem.class);
-                    tradeBean.setOrders(orders);
-                    tradeBeans.add(tradeBean);
-                }
-                //循环取下一页
-                while (hasNext) {
-                    pageNo++;
-                    String resultString1 = updateOrderList(startModified, endModified, pageNo, appKey, appSecret, sessionKey);
-                    JsonNode result1 = JsonUtils.readTree(resultString1);
-                    //没有错误
-                    JsonNode dataResult1 = JsonUtils.node(result1, "trades_sold_increment_get_response");
-                    hasNext = JsonUtils.bool(dataResult1, "has_next");
-                    JsonNode orderListResult1 = JsonUtils.node(dataResult1, "trades");
-                    if (orderListResult1 != null) {
-                        for (Object item : JsonUtils.node(orderListResult1, "trade")) {
-//                            String s = JsonNode.toJSONString(item);
-                            TaoOrderListResponse tradeBean = JsonUtils.readValue(JsonUtils.write(item), TaoOrderListResponse.class);
-                            // 转换orders
-                            JsonNode s = (JsonNode) item;
-                            JsonNode ss = JsonUtils.node(s, "orders");
-                            List<TaoOrderItem> orders = JsonUtils.readList(ss.get("order").toString(), TaoOrderItem.class);
-                            tradeBean.setOrders(orders);
-                            tradeBeans.add(tradeBean);
-                        }
-                    }
-                }
-//                return new PullResult(tradeBeans.size(), tradeBeans);
-                return ApiResultVo.success(tradeBeans.size(), tradeBeans);
-            } else {
-//                return new PullResult(0, tradeBeans);
-                return ApiResultVo.success(0, tradeBeans);
+            if (dataResult == null) {
+                return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(), "响应缺少 trades_sold_increment_get_response 节点，请核对接口返回");
             }
+            List<TaoOrderListResponse> tradeBeans = new ArrayList<>();
+            boolean hasNext = Boolean.TRUE.equals(JsonUtils.bool(dataResult, "has_next"));
+            appendTrades(dataResult, tradeBeans);
+            while (hasNext) {
+                if (pageNo >= MAX_PAGE) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "增量订单分页达到上限（" + MAX_PAGE + "页）仍未取完，请缩小时间范围后重试");
+                }
+                pageNo++;
+                String resultString1 = updateOrderList(startModified, endModified, pageNo, appKey, appSecret, sessionKey);
+                if (!StringUtils.hasText(resultString1)) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "增量订单第" + pageNo + "页请求失败，拉取不完整，请重试");
+                }
+                JsonNode result1 = JsonUtils.readTree(resultString1);
+                if (result1.get("error_response") != null) {
+                    return ApiResultVo.error(ApiResultVoEnum.ParamsError.getIndex(),
+                            "增量订单第" + pageNo + "页返回错误：" + JsonUtils.text(JsonUtils.node(result1, "error_response"), "sub_msg"));
+                }
+                JsonNode dataResult1 = JsonUtils.node(result1, "trades_sold_increment_get_response");
+                if (dataResult1 == null) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "增量订单第" + pageNo + "页响应缺少 trades_sold_increment_get_response 节点，拉取不完整");
+                }
+                hasNext = Boolean.TRUE.equals(JsonUtils.bool(dataResult1, "has_next"));
+                int before = tradeBeans.size();
+                appendTrades(dataResult1, tradeBeans);
+                if (tradeBeans.size() == before && hasNext) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "增量订单第" + pageNo + "页为空但仍声明下一页（has_next=true），拉取不完整");
+                }
+            }
+            return ApiResultVo.success(tradeBeans.size(), tradeBeans);
 
         } else {
             // 有错误

@@ -27,6 +27,7 @@ public class OrderTools {
         if (days == null || days <= 0) days = 30;
         days = Math.min(days, 90);
         if (limit == null || limit <= 0) limit = 100;
+        limit = Math.min(limit, 200);
 
         LambdaQueryWrapper<ShopOrder> wrapper = new LambdaQueryWrapper<>();
         java.util.Objects.requireNonNull(scope, "缺少数据范围");
@@ -36,6 +37,8 @@ public class OrderTools {
         if (orderStatus != null) {
             wrapper.eq(ShopOrder::getOrderStatus, orderStatus);
         }
+        // 先取匹配总数再取样本，避免把 limit 截断后的条数当成订单总量交给模型。
+        long total = orderService.count(wrapper);
         wrapper.orderByDesc(ShopOrder::getCreateOn);
         wrapper.last("LIMIT " + limit);
         List<ShopOrder> list = orderService.list(wrapper);
@@ -45,8 +48,13 @@ public class OrderTools {
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append("共 ").append(list.size()).append(" 条订单记录（近").append(days).append("天）：\n");
-        sb.append("| 订单号 | 订单金额(分) | 支付金额(分) | 收件人 | 收货地址 | 订单状态 | 发货状态 | 下单时间 |\n");
+        sb.append("共 ").append(total).append(" 条订单记录（近").append(days).append("天）");
+        if (total > list.size()) {
+            sb.append("，下列仅为按下单时间倒序的前 ").append(list.size())
+                    .append(" 条，不是全部订单，回答时不要把它当作订单总量");
+        }
+        sb.append("：\n");
+        sb.append("| 订单号 | 订单金额(分) | 支付金额(分) | 收件人 | 收货城市 | 订单状态 | 发货状态 | 下单时间 |\n");
         sb.append("|--------|-------------|-------------|--------|---------|---------|---------|---------|\n");
         for (ShopOrder o : list) {
             String statusText = switch (o.getOrderStatus() != null ? o.getOrderStatus() : -1) {
@@ -69,10 +77,9 @@ public class OrderTools {
                 case 2 -> "已发货";
                 default -> "未知";
             };
+            // 地址只保留到城市：订单分析不需要门牌，避免把可定位到人的住址交给模型。
             String address = (o.getProvince() != null ? o.getProvince() : "")
-                    + (o.getCity() != null ? o.getCity() : "")
-                    + (o.getCounty() != null ? o.getCounty() : "")
-                    + (o.getAddress() != null ? o.getAddress() : "");
+                    + (o.getCity() != null ? o.getCity() : "");
             String date = o.getCreateOn() != null
                     ? o.getCreateOn().format(DateTimeFormatter.ofPattern("MM-dd HH:mm"))
                     : "-";

@@ -32,11 +32,11 @@ public class ReportController extends BaseController {
         Long shopCount = shopService.count();
         Map<String,Object> result = new HashMap<>();
         // 今日销售
-        SalesDailyVo todaySalesDaily = orderService.getTodaySalesDaily(0L);
+        SalesDailyVo todaySalesDaily = orderService.getTodaySalesDaily(null);
         // 查询库存
 //        Long allInventoryQuantity = inventoryService.getAllInventoryQuantity();
 //        result.put("inventory",allInventoryQuantity.doubleValue());
-        result.put("waitShip",orderService.getWaitShipOrderAllCount(0L));
+        result.put("waitShip",orderService.getWaitShipOrderAllCount(null));
         result.put("salesVolume",todaySalesDaily.getAmount());
         result.put("orderCount",todaySalesDaily.getCount().doubleValue());
         result.put("shopCount",shopCount.doubleValue());

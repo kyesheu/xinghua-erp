@@ -1,5 +1,7 @@
 package cn.xinghuaerp.open.tao.response;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.List;
 
 public class TaoOrderListResponse {
@@ -208,6 +210,11 @@ public class TaoOrderListResponse {
         return orders;
     }
 
+    /**
+     * 淘宝返回的 orders 结构是 {"order":[...]}，直接绑定成 List 会抛 MismatchedInputException，
+     * 让整页订单解析失败。子订单由调用方从 JsonNode 单独解析后显式 set，这里禁止 Jackson 绑定。
+     */
+    @JsonIgnore
     public void setOrders(List<TaoOrderItem> orders) {
         this.orders = orders;
     }

@@ -64,8 +64,11 @@ public class InventoryReconciliationService {
                 var reasons=new ArrayList<String>();
                 if(quantity==null || locked==null || available==null || quantity<0 || locked<0 || available<0)reasons.add("INVALID_QUANTITY");
                 if(quantity!=null && locked!=null && available!=null && quantity!=locked+available)reasons.add("BALANCE_MISMATCH");
-                long invalid=number(batch,"invalid_batches"),foreign=number(batch,"foreign_batches");
-                Long batchQuantity=invalid>0 || foreign>0 ? null : number(batch,"batch_quantity");
+                long invalid=number(batch,"invalid_batches"),foreign=number(batch,"foreign_batches"),batchCount=number(batch,"batch_count");
+                // 无任何批次记录时不能把合计当成 0 去比数量：那是「缺批次」而不是「批次合计不符」，
+                // 两者混在一起会让真实差异被大量误报掩盖。
+                Long batchQuantity=batchCount==0 || invalid>0 || foreign>0 ? null : number(batch,"batch_quantity");
+                if(batchCount==0)reasons.add("NO_BATCH_RECORD");
                 if(invalid>0)reasons.add("INVALID_BATCH_QUANTITY");
                 if(foreign>0)reasons.add("BATCH_SCOPE_MISMATCH");
                 if(batchQuantity!=null && quantity!=null && !batchQuantity.equals(quantity))reasons.add("BATCH_TOTAL_MISMATCH");
@@ -74,7 +77,7 @@ public class InventoryReconciliationService {
         }
         String next=rows.isEmpty()?Long.toString(afterId):String.valueOf(rows.getLast().get("id"));
         return new Page(LocalDateTime.now(),rows.size(),next,more,List.copyOf(differences),
-                "仅核对本页有效库存与关联批次；无主库存的孤立批次、单据流水及财务对账不在本接口范围。跨页非同一快照，差异需结合单据复核，不自动修账。");
+                "仅核对本页有效库存与关联批次；无批次记录单列 NO_BATCH_RECORD，不参与合计比对。无主库存的孤立批次、单据流水及财务对账不在本接口范围。跨页非同一快照，差异需结合单据复核，不自动修账。");
     }
     public record OrphanPage(int scanned,String nextAfterId,boolean hasMore,java.util.List<String> batchIds) {}
     @Transactional(readOnly=true,isolation=Isolation.REPEATABLE_READ,timeout=10)
