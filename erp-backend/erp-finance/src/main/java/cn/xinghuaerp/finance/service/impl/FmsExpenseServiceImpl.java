@@ -19,7 +19,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -31,6 +36,9 @@ import java.util.UUID;
 public class FmsExpenseServiceImpl extends ServiceImpl<FmsExpenseMapper, FmsExpense> implements FmsExpenseService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FmsExpenseServiceImpl.class);
+
+    /** 导入判重时 IN 查询的单批上限，避免 SQL 过长。 */
+    private static final int IMPORT_BATCH_SIZE = 500;
 
     @Autowired
     private FmsExpenseItemMapper expenseItemMapper;
@@ -179,14 +187,18 @@ public class FmsExpenseServiceImpl extends ServiceImpl<FmsExpenseMapper, FmsExpe
         int successCount = 0;
         int duplicateCount = 0;
         int failCount = 0;
-        
+
+        // 判重索引一次预加载，替代原来「每条明细查一次 + 每个主单再查一次」的逐条访问。
+        // 导入过程中新写入的费用会回填到同一索引，保证批内去重语义与逐条查库时一致。
+        Map<String, List<ExpenseRef>> existingByOrderNo = preloadExistingExpenseRefs(expenses);
+
         for (FmsExpense expense : expenses) {
             try {
                 boolean isDuplicate = false;
                 
                 if (expense.getItems() != null && !expense.getItems().isEmpty()) {
                     for (FmsExpenseItem item : expense.getItems()) {
-                        if (isDuplicateExpense(expense.getExpenseType(), item.getOrderNo(), expense.getAmount())) {
+                        if (isDuplicateExpense(existingByOrderNo, expense.getExpenseType(), item.getOrderNo(), expense.getAmount())) {
                             isDuplicate = true;
                             break;
                         }
@@ -218,6 +230,8 @@ public class FmsExpenseServiceImpl extends ServiceImpl<FmsExpenseMapper, FmsExpe
                             expenseItemMapper.insert(item);
                         }
                     }
+                    // 本批已写入的费用同样参与后续判重，否则同文件内重复行会被放过
+                    indexExpense(existingByOrderNo, expense);
                     successCount++;
                 } else {
                     failCount++;
@@ -236,25 +250,117 @@ public class FmsExpenseServiceImpl extends ServiceImpl<FmsExpenseMapper, FmsExpe
         return ImportResult.success(successCount, duplicateCount);
     }
     
-    private boolean isDuplicateExpense(Integer expenseType, String orderNo, BigDecimal amount) {
+    /**
+     * 预加载本批涉及订单号的历史费用索引。
+     * 原实现对每个订单号先查全部明细、再对每条明细单独取主单，最坏是 订单号数 × 明细数 × 主单数 次查询；
+     * 这里改为按订单号、主单ID各做一批 IN 查询，查询次数与数据量无关。
+     */
+    private Map<String, List<ExpenseRef>> preloadExistingExpenseRefs(List<FmsExpense> expenses) {
+        Map<String, List<ExpenseRef>> index = new HashMap<>();
+        if (expenses == null || expenses.isEmpty()) {
+            return index;
+        }
+
+        Set<String> orderNos = new LinkedHashSet<>();
+        for (FmsExpense expense : expenses) {
+            if (expense == null || expense.getItems() == null) {
+                continue;
+            }
+            for (FmsExpenseItem item : expense.getItems()) {
+                if (item != null && item.getOrderNo() != null && !item.getOrderNo().isEmpty()) {
+                    orderNos.add(item.getOrderNo());
+                }
+            }
+        }
+        if (orderNos.isEmpty()) {
+            return index;
+        }
+
+        List<String> orderNoList = new ArrayList<>(orderNos);
+        for (int start = 0; start < orderNoList.size(); start += IMPORT_BATCH_SIZE) {
+            List<String> chunk = orderNoList.subList(start, Math.min(start + IMPORT_BATCH_SIZE, orderNoList.size()));
+            List<FmsExpenseItem> items = expenseItemMapper.selectList(
+                    new QueryWrapper<FmsExpenseItem>().in("order_no", chunk));
+            if (items == null || items.isEmpty()) {
+                continue;
+            }
+
+            Set<Long> expenseIds = new LinkedHashSet<>();
+            for (FmsExpenseItem item : items) {
+                if (item != null && item.getExpenseId() != null) {
+                    expenseIds.add(item.getExpenseId());
+                }
+            }
+            Map<Long, FmsExpense> expenseById = loadExpensesByIds(expenseIds);
+
+            for (FmsExpenseItem item : items) {
+                if (item == null) {
+                    continue;
+                }
+                FmsExpense owner = expenseById.get(item.getExpenseId());
+                if (owner == null) {
+                    continue;
+                }
+                index.computeIfAbsent(item.getOrderNo(), key -> new ArrayList<>())
+                        .add(new ExpenseRef(owner.getExpenseType(), owner.getAmount()));
+            }
+        }
+        return index;
+    }
+
+    private Map<Long, FmsExpense> loadExpensesByIds(Set<Long> expenseIds) {
+        Map<Long, FmsExpense> result = new HashMap<>();
+        if (expenseIds == null || expenseIds.isEmpty()) {
+            return result;
+        }
+        List<Long> idList = new ArrayList<>(expenseIds);
+        for (int start = 0; start < idList.size(); start += IMPORT_BATCH_SIZE) {
+            List<Long> chunk = idList.subList(start, Math.min(start + IMPORT_BATCH_SIZE, idList.size()));
+            List<FmsExpense> found = baseMapper.selectList(new QueryWrapper<FmsExpense>().in("id", chunk));
+            if (found == null) {
+                continue;
+            }
+            for (FmsExpense expense : found) {
+                result.put(expense.getId(), expense);
+            }
+        }
+        return result;
+    }
+
+    private void indexExpense(Map<String, List<ExpenseRef>> index, FmsExpense expense) {
+        if (expense.getItems() == null || expense.getItems().isEmpty()) {
+            return;
+        }
+        for (FmsExpenseItem item : expense.getItems()) {
+            if (item == null || item.getOrderNo() == null || item.getOrderNo().isEmpty()) {
+                continue;
+            }
+            index.computeIfAbsent(item.getOrderNo(), key -> new ArrayList<>())
+                    .add(new ExpenseRef(expense.getExpenseType(), expense.getAmount()));
+        }
+    }
+
+    private boolean isDuplicateExpense(Map<String, List<ExpenseRef>> index, Integer expenseType,
+                                       String orderNo, BigDecimal amount) {
         if (orderNo == null || orderNo.isEmpty()) {
             return false;
         }
-        
-        QueryWrapper<FmsExpenseItem> itemQuery = new QueryWrapper<>();
-        itemQuery.eq("order_no", orderNo);
-        
-        List<FmsExpenseItem> items = expenseItemMapper.selectList(itemQuery);
-        
-        for (FmsExpenseItem item : items) {
-            FmsExpense expense = getById(item.getExpenseId());
-            if (expense != null && 
-                expense.getExpenseType().equals(expenseType) && 
-                expense.getAmount().compareTo(amount) == 0) {
+        List<ExpenseRef> refs = index.get(orderNo);
+        if (refs == null || refs.isEmpty()) {
+            return false;
+        }
+        for (ExpenseRef ref : refs) {
+            // 类型或金额缺失时原实现会抛 NPE 被记成导入失败，这里按「无法比较即不判重」处理
+            if (ref.expenseType() != null && ref.amount() != null && amount != null
+                    && ref.expenseType().equals(expenseType)
+                    && ref.amount().compareTo(amount) == 0) {
                 return true;
             }
         }
-        
         return false;
+    }
+
+    /** 判重只需要费用类型与金额，不持有整个主单实体。 */
+    private record ExpenseRef(Integer expenseType, BigDecimal amount) {
     }
 }

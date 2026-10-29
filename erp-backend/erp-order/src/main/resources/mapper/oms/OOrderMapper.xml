@@ -92,7 +92,7 @@
 
         FROM
             o_order
-        WHERE 1=1
+        WHERE order_time &gt;= CURDATE() - INTERVAL '90' DAY
         <if test="merchantId!=null and merchantId &gt; 0">
             and merchant_id = #{merchantId}
         </if>
@@ -128,7 +128,8 @@
         FROM
             o_order
 
-        WHERE DATE(`order_time`) = CURDATE()
+        WHERE `order_time` &gt;= CURDATE()
+          AND `order_time` &lt; CURDATE() + INTERVAL '1' DAY
         <if test="merchantId!=null and merchantId &gt; 0">
             and merchant_id = #{merchantId}
         </if>

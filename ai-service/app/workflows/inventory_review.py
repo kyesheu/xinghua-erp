@@ -36,9 +36,23 @@ def _sqlite_review_lock(path: str):
     with closing(sqlite3.connect(lock_path, timeout=30)) as guard:
         guard.execute("BEGIN IMMEDIATE")
         try:
+            _prepare_checkpoint_db(path)
             yield
         finally:
             guard.rollback()
+
+
+def _prepare_checkpoint_db(path: str) -> None:
+    """
+    在持有锁的情况下先把检查点库切成 WAL 并建好表。
+    首次创建时 PRAGMA journal_mode=WAL 需要独占访问，若留给 SqliteSaver 的懒加载 setup 去做，
+    多进程场景下后到的连接可能拿到只读句柄并抛「attempt to write a readonly database」。
+    预先执行后，Saver 内部的同名 PRAGMA 变成幂等操作。
+    """
+    with closing(sqlite3.connect(path, timeout=30)) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
+        conn.commit()
 
 
 
