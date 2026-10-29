@@ -14,4 +14,5 @@ public interface OShopPullLasttimeService extends IService<OShopPullLasttime> {
     OShopPullLasttime getLasttimeByShop(Long shopId, String pullType);
 
     List<OShopPullLasttime> getLasttimeByShop(Long shopId);
+    boolean advance(Long shopId,String pullType,java.time.LocalDateTime time);
 }

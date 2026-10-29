@@ -24,6 +24,7 @@ import java.util.Map;
 public class FmsSettlementController extends BaseController {
     private final FmsOrderSettlementService settlementService;
     private final AiAgentPermissionService permissions;
+    private final cn.xinghuaerp.system.service.BusinessAccessService access;
 
     public record Request(List<String> orderIds) {}
 
@@ -36,7 +37,7 @@ public class FmsSettlementController extends BaseController {
         if (request.orderIds().size() > 200) throw new IllegalArgumentException("单次最多结算200笔订单");
         for (String id : request.orderIds())
             if (id == null || !id.matches("\\d{1,19}")) throw new IllegalArgumentException("订单ID格式无效: " + id);
-        return success(settlementService.autoSettlement(request.orderIds(), getUsername()));
+        return success(settlementService.autoSettlement(request.orderIds(), getUsername(), access.salesScope(userId)));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

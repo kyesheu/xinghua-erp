@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
-public class DingTalkNotifier {
+public class DingTalkNotifier implements ChannelNotifier {
 
     public boolean notify(String webhook, String secret, String title, String content) {
         try {
@@ -39,11 +39,13 @@ public class DingTalkNotifier {
 
             String result = OkHttpClientHelper.post(url, body.toString());
             boolean ok = result != null && result.contains("\"ok\"");
-            if (!ok) log.warn("钉钉推送返回异常: {}", result);
+            if (!ok) log.warn("通知渠道返回失败，详情请在服务商控制台核对");
             return ok;
         } catch (Exception e) {
-            log.error("钉钉推送失败", e);
+            log.warn("钉钉推送失败" + " errorType={}", e.getClass().getSimpleName());
             return false;
         }
     }
+    @Override public String type() { return "DINGTALK"; }
+    @Override public boolean send(cn.xinghuaerp.system.entity.SysAlertChannel channel,String title,String content) {return notify(channel.getWebhookUrl(), channel.getSecret(), title, content);}
 }

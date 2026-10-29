@@ -1,91 +1,56 @@
-# docker/ 目录说明
+# 容器环境说明
 
-所有容器编排与配置集中在本目录，**改配置直接改本目录下的文件，重启对应容器即生效**。
+本目录集中保存容器编排、MySQL 配置、nginx 代理配置和可选演示数据。完整应用启动顺序见[部署指南](../docs/部署指南.md)。
 
-## 文件结构
+## 服务与文件
 
-| 路径 | 作用 |
-|---|---|
-| `docker-compose.yml` | 本地开发环境编排（MySQL / Redis / MinIO / RabbitMQ，backend / frontend / nginx 为注释模板） |
-| `mysql/conf.d/` | **映射到 MySQL 容器 `/etc/mysql/conf.d`**：把自定义 `my.cnf` 放进来即生效（重启容器读取） |
-| `nginx/nginx.conf` | **映射到 nginx 容器 `/etc/nginx/nginx.conf`**：前端生产静态部署配置（含 `/prod-api/` 反代与 SSE 支持） |
+`docker-compose.yml` 默认启动 MySQL、Redis、MinIO、MinIO 初始化任务和 RabbitMQ。Java、前端与 nginx 的注释段属于部署配置示例，不会自动启动应用；启用前需按实际构建产物、Java 21 和网络地址调整。
 
-## 常用命令（在本目录执行）
+| 路径 | 用途 |
+| --- | --- |
+| `docker-compose.yml` | 服务、端口、数据卷和初始化 SQL 挂载 |
+| `mysql/conf.d/` | 映射到 MySQL 的自定义配置 |
+| `mysql/upgrade-order-reliability.sql` | 已有数据库的一次性订单通知结构升级 |
+| `nginx/nginx.conf` | 静态页面、API 反向代理及 SSE 配置 |
+| `seed/` | 可选的本地演示数据 |
 
-```bash
-docker compose up -d          # 启动 MySQL/Redis/MinIO/RabbitMQ（首次会自动初始化数据库）
-docker compose ps             # 查看状态与健康检查
-docker compose down           # 停止（保留数据卷）
-docker compose down -v        # 停止并清空数据卷（下次启动重新初始化数据库）
+## 启停
+
+在本目录执行：
+
+```powershell
+docker compose up -d
+docker compose ps
+docker compose logs mysql
+docker compose down
 ```
 
-## 数据库初始化（重要）
+`down` 保留数据卷。删除数据卷会同时删除对应服务的数据，不用于日常升级。
 
-MySQL 只在**数据卷为空**时执行初始化，脚本按容器内文件名顺序运行：
+## 数据库初始化
 
-| 顺序 | 宿主文件 | 容器内路径 | 作用 |
-|---|---|---|---|
-| 01 | `../docs/sql/xinghua-erp.sql` | `01-xinghua-erp.sql` | 主库结构与基础数据（145 张表） |
-| 02 | `../docs/sql/ai-inventory-review.sql` | `02-ai-inventory-review.sql` | 库存补货人机审核任务表 |
-| 03 | `../docs/sql/ai-purchase-draft.sql` | `03-ai-purchase-draft.sql` | Agent 采购草稿幂等记录表 |
-| 04 | `../docs/sql/business-user-binding-migration.sql` | `04-business-user-binding.sql` | 账号与业务主体绑定表 |
-| 05–10 | `../docs/sql/ai-*-permission.sql`、`ai-finance-settlement.sql` | 对应编号 | AI 各查询权限与结算执行权限的菜单项（幂等，不授予任何角色） |
+MySQL 仅在数据目录为空时执行初始化。脚本来自 `docs/sql/`，顺序由 Compose 的挂载目标编号决定：
 
-注意两点：
+| 编号 | 内容 |
+| --- | --- |
+| 01 | `xinghua-erp.sql`：主表结构、基础数据及订单 Outbox |
+| 02–03 | AI 库存审核任务、采购草稿幂等记录 |
+| 04 | 用户与业务主体绑定 |
+| 05–10 | AI 功能权限及财务结算权限登记 |
 
-- **一条 SQL 报错会导致其后的语句整段不执行**（mysql 客户端批量模式遇错即停）。修改初始化脚本后，确保每条语句都能执行成功，尤其注意字段长度与种子数据是否匹配。
-- 健康检查不只 `SELECT 1`，还会校验 `sys_message`、`sys_user`、`ai_config`、`ai_inventory_review_task` 四张位于脚本末尾的表是否齐全。若初始化失败，MySQL 容器会停在 `unhealthy`，`docker compose ps` 能直接看出来。
+主 SQL 含删除重建表语句，不可重复导入已有业务库。权限登记不等于角色授权，需在管理页面按岗位授权。已有数据卷不会因文件变更而重新执行初始化，应检查实际结构并执行对应的增量 SQL。
 
-排查初始化失败：
+MySQL 健康检查校验基础连接及关键表。初始化失败时先查看容器日志，定位失败语句；修复结构或数据问题后再启动应用。
 
-```bash
-docker logs xinghua-erp-mysql-1 2>&1 | grep -E "running /docker-entrypoint-initdb.d|ERROR"
-docker compose down -v && docker compose up -d   # 改过 SQL 必须清卷重建，否则不会重新导入
-```
+## 访问与配置
 
-物流公司基础数据（2373 条）已在主 SQL 内，`docs/sql/erp_logistics_company-data.sql` 仅用于单独覆盖导入，不参与初始化。
+| 服务 | 本机端口 |
+| --- | --- |
+| MySQL | 13370 |
+| Redis | 16379 |
+| MinIO API / 控制台 | 19000 / 19001 |
+| RabbitMQ AMQP / 管理台 | 56720 / 15672 |
 
-### 已有数据卷不会重跑脚本
+端口默认绑定 `127.0.0.1`。数据库密码通过 `MYSQL_ROOT_PASSWORD` 注入，并与后端 `DB_PASSWORD` 保持一致。MinIO 和 RabbitMQ 凭据按 Compose 中的环境变量配置；默认值仅供本机环境。
 
-初始化脚本只对空数据卷生效。表结构或 MinIO 策略改过之后，老环境要手动补一次：
-
-```sql
--- 例：sys_oss 新增业务分类与文件大小
-ALTER TABLE sys_oss
-  ADD COLUMN category varchar(50) DEFAULT '' COMMENT '业务分类' AFTER bucket,
-  ADD COLUMN file_size bigint DEFAULT 0 COMMENT '文件大小（字节）' AFTER category;
-```
-
-```bash
-docker compose up -d --force-recreate minio-init   # 重新应用存储桶匿名读策略
-```
-
-## 端口约定（仅监听本机 127.0.0.1）
-
-| 服务 | 宿主端口 | 容器端口 |
-|---|---|---|
-| MySQL | 13370 | 3306（库名 `xinghua-erp`，root 密码由环境变量 `MYSQL_ROOT_PASSWORD` 注入） |
-| Redis | 16379 | 6379 |
-| MinIO API / 控制台 | 19000 / 19001 | 9000 / 9001（桶 `xinghua-erp`，账号由 `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` 注入） |
-| RabbitMQ AMQP / 管理台 | 56720 / 15672 | 5672 / 15672（账号由 `SPRING_RABBITMQ_USERNAME` / `SPRING_RABBITMQ_PASSWORD` 注入） |
-| nginx（可选，取消注释后） | 80 | 80 |
-
-## 凭据配置（重要）
-
-本目录**不保存任何明文密码**，启动前请先在当前 shell 注入环境变量，未设置时使用仅供本地开发的占位默认值：
-
-```bash
-export MYSQL_ROOT_PASSWORD=xinghua-erp-dev-only   # 与后端 DB_PASSWORD 保持一致
-export MINIO_ACCESS_KEY=minioadmin
-export MINIO_SECRET_KEY=minioadmin
-```
-
-## 可选服务（取消 docker-compose.yml 中对应注释后使用）
-
-- **backend**：容器化后端，需先在 `erp-backend/` 执行 `mvn -pl erp-api -am clean package -DskipTests` 产出 jar。
-- **frontend**：容器化前端开发服务（Vite 热更新），访问 http://localhost:88。
-- **nginx**：前端生产静态部署，需先在 `erp-frontend/` 执行 `npm run build` 产出 `dist/`，访问 http://localhost:80。
-
-## 已有数据库升级
-
-订单事件可靠投递版本需要在启动后端前，对已有数据库执行一次 `docker/mysql/upgrade-order-reliability.sql`，新增 Outbox 表及消息去重键；新数据库无需重复执行。执行前确认连接的是本地开发数据库。
+MinIO 初始化任务创建 `xinghua-erp` 桶及配置的图片读取策略。重新应用策略可执行 `docker compose up -d --force-recreate minio-init`，文件数据仍保存在数据卷中。修改 MySQL 配置后需重启 MySQL；nginx 配置修改后需重新加载或重启对应服务。

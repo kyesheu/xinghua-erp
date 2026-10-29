@@ -6,6 +6,8 @@ from typing import Iterator
 from uuid import UUID
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
+from app.core.model_policy import _POLICY, RequestPolicy, current_policy
 from pydantic import BaseModel, Field, model_validator
 from app.core.config import apply_model_override, clear_model_override, shared_secret
 from app.schemas.business import BusinessFacts
@@ -38,10 +40,22 @@ async def bind_request_context(request: Request, call_next):
         request.headers.get("x-model-base-url", ""),
         request.headers.get("x-model-name", ""),
     )
+    request_id = request.headers.get("x-request-id", "")
+    import re
+    from uuid import uuid4
+    if not re.fullmatch(r"[a-fA-F0-9-]{16,64}", request_id):
+        request_id = str(uuid4())
+    policy_token = _POLICY.set(RequestPolicy(request_id=request_id, report_usage=request.headers.get("x-ai-usage") == "1"))
     tool_token = bind_tool_token(request.headers.get("x-tool-token", ""))
     try:
-        return await call_next(request)
+        response = await call_next(request)
+        policy = current_policy()
+        response.headers["X-Request-ID"] = request_id
+        if request.headers.get("x-ai-usage") == "1" and not response.headers.get("content-type", "").startswith("application/x-ndjson"):
+            response.headers["X-AI-Usage"] = json.dumps(policy.usage())
+        return response
     finally:
+        _POLICY.reset(policy_token)
         reset_tool_token(tool_token)
         clear_model_override(token)
 
@@ -132,25 +146,46 @@ class BriefRequest(BaseModel):
 
 
 def ndjson(events) -> Iterator[str]:
-    """逐行 JSON 流：Java 侧按行解析后转成前端已有的 SSE 事件，不必再引入流式依赖。"""
     for item in events:
         yield json.dumps(item, ensure_ascii=False) + "\n"
+    policy = current_policy()
+    if policy is not None and policy.report_usage:
+        yield json.dumps({"type": "usage", "content": json.dumps(policy.usage())}) + "\n"
+
+
+async def owned_ndjson(http: Request, events):
+    policy = current_policy()
+    iterator = iter(ndjson(events))
+    end = object()
+    try:
+        while True:
+            item = await run_in_threadpool(next, iterator, end)
+            if item is end or await http.is_disconnected():
+                break
+            yield item
+    finally:
+        if policy is not None:
+            policy.cancelled.set()
+        try:
+            iterator.close()
+        except (ValueError, RuntimeError):
+            pass
 
 
 @app.post("/internal/chat")
-def chat(request: ChatRequest, x_agent_secret: str = Header(default="")):
+def chat(request: ChatRequest, http: Request, x_agent_secret: str = Header(default="")):
     """多轮对话：模型自行调用 query_erp 取数，逐段返回文本。"""
     require_secret(x_agent_secret)
     messages = [message.model_dump() for message in request.messages]
-    return StreamingResponse(ndjson(stream_agent(request.system, messages)), media_type="application/x-ndjson")
+    return StreamingResponse(owned_ndjson(http, stream_agent(request.system, messages)), media_type="application/x-ndjson")
 
 
 @app.post("/internal/analysis")
-def analysis(request: AnalysisRequest, x_agent_secret: str = Header(default="")):
+def analysis(request: AnalysisRequest, http: Request, x_agent_secret: str = Header(default="")):
     """深度分析：同样走工具循环，提示模板由 Java 组装后传入。"""
     require_secret(x_agent_secret)
     messages = [{"role": "user", "content": request.prompt}]
-    return StreamingResponse(ndjson(stream_agent(request.system, messages)), media_type="application/x-ndjson")
+    return StreamingResponse(owned_ndjson(http, stream_agent(request.system, messages)), media_type="application/x-ndjson")
 
 
 @app.post("/internal/brief")

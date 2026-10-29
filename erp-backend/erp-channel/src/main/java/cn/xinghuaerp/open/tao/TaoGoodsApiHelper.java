@@ -59,13 +59,16 @@ public class TaoGoodsApiHelper {
                 }
                 if (totalPage > 1) {
                     //循环取下一页
-                    while (pageNo <= totalPage) {
+                    while (pageNo < totalPage) {
+                        if(Thread.currentThread().isInterrupted())throw new java.io.InterruptedIOException("商品分页已取消");
                         pageNo++;
                         String resultString1 = pullGoodsList(pageNo, appKey, appSecret, sessionKey);
                         JsonNode result1 = JsonUtils.readTree(resultString1);
                         //没有错误
                         JsonNode dataResult1 = JsonUtils.node(result1, "items_onsale_get_response");
 
+                        if(dataResult1==null || dataResult1.isMissingNode() || dataResult1.isNull())
+                            throw new IOException("商品分页返回异常，未完成拉取");
                         JsonNode orderListResult1 = JsonUtils.node(dataResult1, "items");
                         if (orderListResult1 != null) {
                             for (Object item : JsonUtils.node(orderListResult1, "item")) {

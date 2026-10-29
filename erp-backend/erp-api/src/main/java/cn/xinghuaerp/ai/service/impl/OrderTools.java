@@ -17,14 +17,21 @@ import java.util.List;
 public class OrderTools {
 
     private final ShopOrderService orderService;
+    public String getOrderList(Integer days, Integer orderStatus, Integer limit) {
+        return getOrderList(days, orderStatus, limit, new cn.xinghuaerp.system.service.SalesScope(null, null));
+    }
     public String getOrderList(
             Integer days,
             Integer orderStatus,
-            Integer limit) {
+            Integer limit, cn.xinghuaerp.system.service.SalesScope scope) {
         if (days == null || days <= 0) days = 30;
+        days = Math.min(days, 90);
         if (limit == null || limit <= 0) limit = 100;
 
         LambdaQueryWrapper<ShopOrder> wrapper = new LambdaQueryWrapper<>();
+        java.util.Objects.requireNonNull(scope, "缺少数据范围");
+        wrapper.eq(scope.merchantId() != null, ShopOrder::getMerchantId, scope.merchantId());
+        wrapper.eq(scope.shopId() != null, ShopOrder::getShopId, scope.shopId());
         wrapper.ge(ShopOrder::getCreateOn, LocalDateTime.now().minusDays(days));
         if (orderStatus != null) {
             wrapper.eq(ShopOrder::getOrderStatus, orderStatus);

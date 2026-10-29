@@ -73,7 +73,7 @@ def explain(state: State) -> dict:
             result["warnings"].append("模型未启用，未对自然语言问题生成回答。")
         return {"result": result}
     # 模型由运行者显式启用；不向模型提供权限、凭据、客户或订单个人信息。
-    from langchain_openai import ChatOpenAI
+    from app.core.model_policy import build_chat_model as ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
     try:
         model = ChatOpenAI(model=settings["name"], api_key=settings["api_key"],

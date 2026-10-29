@@ -12,14 +12,19 @@ import java.util.Map;
  * @create: 2024-08-28 15:20
  **/
 public class OkHttpClientHelper {
-    private static final OkHttpClient client = new OkHttpClient(); // 单例 OkHttpClient 实例
+    private static final OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(20, java.util.concurrent.TimeUnit.SECONDS)
+            .callTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false).followRedirects(false).followSslRedirects(false).build();
 
     // 执行 GET 请求
     public static String get(String url) throws IOException {
         Request request = new Request.Builder().url(url).build();
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
-            return response.body().string();
+            if (!response.isSuccessful()) throw new IOException("平台HTTP状态异常：" + response.code());
+            return readBounded(response.body());
         }
     }
 
@@ -28,8 +33,8 @@ public class OkHttpClientHelper {
         RequestBody body = RequestBody.create(json, MediaType.get("application/json; charset=utf-8"));
         Request request = new Request.Builder().url(url).post(body).build();
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
-            return response.body().string();
+            if (!response.isSuccessful()) throw new IOException("平台HTTP状态异常：" + response.code());
+            return readBounded(response.body());
         }
     }
 
@@ -42,7 +47,7 @@ public class OkHttpClientHelper {
 //    * @Date: 2024/9/11 10:38
 //    */
 //    public static String postForm(String appCode, String url, Map<String, String> params) throws IOException {
-//        OkHttpClient client = new OkHttpClient.Builder().build();
+//
 //        FormBody.Builder formbuilder = new FormBody.Builder();
 //        Iterator<String> it = params.keySet().iterator();
 //        while (it.hasNext()) {
@@ -67,7 +72,7 @@ public class OkHttpClientHelper {
      * @throws IOException
      */
     public static String postForm(String url, Map<String, String> params, Map<String, String> headers) throws IOException {
-        OkHttpClient client = new OkHttpClient.Builder().build();
+
         FormBody.Builder formBuilder = new FormBody.Builder();
 
         // 添加表单参数
@@ -86,8 +91,19 @@ public class OkHttpClientHelper {
 
         Request request = requestBuilder.build();
         try (Response response = client.newCall(request).execute()) {
-            System.out.println("返回状态码: " + response.code() + ", message: " + response.message());
-            return response.body().string();
+            if (!response.isSuccessful()) throw new IOException("平台HTTP状态异常：" + response.code());
+            return readBounded(response.body());
+        }
+    }
+    static String readBounded(ResponseBody body) throws IOException {
+        if(body==null)throw new IOException("平台响应为空");
+        int limit=8*1024*1024;
+        if(body.contentLength()>limit)throw new IOException("平台响应超过8MiB，请缩小查询范围");
+        try(var stream=body.byteStream()) {
+            byte[] bytes=stream.readNBytes(limit+1);
+            if(bytes.length>limit)throw new IOException("平台响应超过8MiB，请缩小查询范围");
+            var type=body.contentType();var charset=type==null?java.nio.charset.StandardCharsets.UTF_8:type.charset(java.nio.charset.StandardCharsets.UTF_8);
+            return new String(bytes,charset);
         }
     }
 }

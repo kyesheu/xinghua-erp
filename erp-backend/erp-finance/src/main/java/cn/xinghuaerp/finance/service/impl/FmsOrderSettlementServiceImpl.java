@@ -117,107 +117,80 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
         return page.getRecords();
     }
 
+    @Autowired
+    private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
     @Override
-    @Transactional
-    public Map<String, Object> autoSettlement(List<String> orderIds, String operator) {
-        Map<String, Object> result = new HashMap<>();
-        int successCount = 0;
-        int failCount = 0;
-        List<String> failReasons = new ArrayList<>();
-
-        for (String orderId : orderIds) {
-            try {
-                FmsOrderSettlement settlement = calculateOrderSettlement(orderId);
-                if (settlement != null) {
-                    settlement.setCreateBy(operator);
-                    settlement.setCreateTime(LocalDateTime.now());
-                    settlement.setVersion(1);
-                    settlement.setStatus(1);
-                    baseMapper.insert(settlement);
-
-                    saveSettlementItems(settlement);
-
-                    updateOrderSettlementStatus(orderId, settlement.getId());
-                    updateExpenseItemSettlementStatus(Long.valueOf(orderId), settlement.getId());
-
-                    successCount++;
-                } else {
-                    failCount++;
-                    failReasons.add("订单 " + orderId + " 无法结算：无法获取订单数据或订单已发货");
-                }
-            } catch (Exception e) {
-                failCount++;
-                failReasons.add("订单 " + orderId + " 结算失败：" + e.getMessage());
-            }
+    public Map<String,Object> autoSettlement(List<String> orderIds,String operator) {
+        return autoSettlement(orderIds,operator,new cn.xinghuaerp.system.service.SalesScope(null,null));
+    }
+    @Override
+    public Map<String,Object> autoSettlement(List<String> orderIds,String operator,cn.xinghuaerp.system.service.SalesScope scope) {
+        Objects.requireNonNull(scope,"结算范围缺失");
+        if(orderIds==null || orderIds.isEmpty() || orderIds.size()>200)throw new IllegalArgumentException("单批结算订单数量须为1至200");
+        int success=0;var failures=new ArrayList<String>();
+        for(String id:orderIds) {
+            try { settleOne(id,operator,scope);success++; }
+            catch(RuntimeException failure){failures.add("订单 "+id+" 结算失败，请核查订单状态及费用资料");}
         }
-
-        result.put("successCount", successCount);
-        result.put("failCount", failCount);
-        result.put("failReasons", failReasons);
-        return result;
+        var result=new HashMap<String,Object>();result.put("successCount",success);result.put("failCount",failures.size());result.put("failReasons",failures);return result;
     }
 
     @Override
-    @Transactional
-    public Map<String, Object> manualSettlement(String orderId, String settlementId, String operator) {
-        Map<String, Object> result = new HashMap<>();
-        try {
-            FmsOrderSettlement settlement = calculateOrderSettlement(orderId);
-            if (settlement != null) {
-                settlement.setCreateBy(operator);
-                settlement.setCreateTime(LocalDateTime.now());
-                settlement.setVersion(1);
-                settlement.setStatus(1);
-                baseMapper.insert(settlement);
-
-                saveSettlementItems(settlement);
-
-                updateOrderSettlementStatus(orderId, settlement.getId());
-                updateExpenseItemSettlementStatus(Long.valueOf(orderId), settlement.getId());
-
-                result.put("success", true);
-                result.put("settlementId", settlement.getId());
-            } else {
-                result.put("success", false);
-                result.put("message", "无法获取订单数据");
-            }
-        } catch (Exception e) {
-            result.put("success", false);
-            result.put("message", e.getMessage());
-        }
+    public Map<String,Object> manualSettlement(String orderId,String settlementId,String operator) {
+        var result=new HashMap<String,Object>();
+        try {var settlement=settleOne(orderId,operator,new cn.xinghuaerp.system.service.SalesScope(null,null));result.put("success",true);result.put("settlementId",settlement.getId());}
+        catch(RuntimeException failure){result.put("success",false);result.put("message","结算未完成，请核查订单状态及费用资料");}
         return result;
+    }
+
+    private FmsOrderSettlement settleOne(String orderId,String operator,cn.xinghuaerp.system.service.SalesScope scope) {
+        if(orderId==null || !orderId.matches("[1-9][0-9]{0,18}"))throw new IllegalArgumentException("订单标识无效");
+        var transaction=new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        transaction.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        transaction.setIsolationLevel(org.springframework.transaction.TransactionDefinition.ISOLATION_REPEATABLE_READ);
+        return transaction.execute(status->{
+            OOrder order=orderMapper.getOOrderOne(new QueryWrapper<OOrder>().eq("id",orderId).last("FOR UPDATE"));
+            if(order==null || (order.getSettlementStatus()!=null && order.getSettlementStatus()!=0))
+                throw new IllegalStateException("订单不存在或已经结算");
+            scope.check(order.getMerchantId(),order.getShopId());
+            var settlement=calculateOrderSettlement(orderId);
+            if(settlement==null)throw new IllegalStateException("订单资料不可用");
+            settlement.setCreateBy(operator);settlement.setCreateTime(LocalDateTime.now());settlement.setVersion(1);settlement.setStatus(1);
+            requireWrite(baseMapper.insert(settlement));
+            saveSettlementItems(settlement);
+            updateOrderSettlementStatus(orderId,settlement.getId());
+            updateExpenseItemSettlementStatus(Long.valueOf(orderId),settlement.getId());
+            return settlement;
+        });
+    }
+    private static void requireWrite(int affected) {
+        if(affected!=1)throw new IllegalStateException("结算写入失败");
     }
 
     @Override
     @Transactional
     public boolean cancelSettlement(Long id, String operator) {
-        FmsOrderSettlement settlement = baseMapper.selectById(id);
-        if (settlement != null) {
-            QueryWrapper<FmsOrderSettlementItem> itemWrapper = new QueryWrapper<>();
-            itemWrapper.eq("settlement_id", id);
-            settlementItemMapper.delete(itemWrapper);
-
-            QueryWrapper<FmsExpenseItem> expenseWrapper = new QueryWrapper<>();
-            expenseWrapper.eq("settlement_id", id);
-            List<FmsExpenseItem> items = expenseItemMapper.selectList(expenseWrapper);
-            for (FmsExpenseItem item : items) {
-                item.setSettlementStatus(0);
-                item.setSettlementId(null);
-                item.setSettlementTime(null);
-                expenseItemMapper.updateById(item);
-            }
-
-            OOrder order = orderMapper.getOOrderById(settlement.getOrderId());
-            if (order != null) {
-                order.setSettlementStatus(0);
-                order.setSettlementId(null);
-                order.setSettlementTime(null);
-                orderMapper.updateOOrder(order);
-            }
-
-            return baseMapper.deleteById(id) > 0;
+        FmsOrderSettlement snapshot=baseMapper.selectById(id);
+        if(snapshot==null)return false;
+        // 与创建结算一致：先锁订单，再锁结算单，避免取消与重结算交错。
+        OOrder order=orderMapper.getOOrderOne(new QueryWrapper<OOrder>().eq("id",snapshot.getOrderId()).last("FOR UPDATE"));
+        FmsOrderSettlement settlement=baseMapper.selectOne(new QueryWrapper<FmsOrderSettlement>().eq("id",id).last("FOR UPDATE"));
+        if(settlement==null)return false;
+        if(order==null || !Objects.equals(order.getSettlementId(),id))throw new IllegalStateException("订单与结算关联不一致，请先核对");
+        settlementItemMapper.delete(new QueryWrapper<FmsOrderSettlementItem>().eq("settlement_id",id));
+        var affectedExpenses=expenseItemMapper.selectList(new QueryWrapper<FmsExpenseItem>().eq("settlement_id",id)).stream()
+                .map(FmsExpenseItem::getExpenseId).filter(Objects::nonNull).distinct().sorted().toList();
+        // 显式 SET NULL，不能依赖 updateById 的非空字段更新策略。
+        expenseItemMapper.update(null,new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<FmsExpenseItem>()
+                .eq("settlement_id",id).set("settlement_status",0).set("settlement_id",null).set("settlement_time",null));
+        for(Long expenseId:affectedExpenses) {
+            requireWrite(expenseMapper.update(null,new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<FmsExpense>()
+                    .eq("id",expenseId).set("settlement_status",0).set("settlement_id",null).set("settlement_time",null)));
         }
-        return false;
+        requireWrite(orderMapper.clearOrderSettlement(settlement.getOrderId(),id));
+        requireWrite(baseMapper.deleteById(id));
+        return true;
     }
 
     @Override
@@ -245,7 +218,8 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
         settlement.setMerchantId(order.getMerchantId());
         settlement.setShopId(order.getShopId());
 
-        settlement.setSalesAmount(order.getAmount() != null ? BigDecimal.valueOf(order.getAmount()) : BigDecimal.ZERO);
+        if(order.getAmount()==null)throw new IllegalStateException("订单销售金额缺失，不能默认零结算");
+        settlement.setSalesAmount(BigDecimal.valueOf(order.getAmount()));
 
         BigDecimal purchaseCost = calculatePurchaseCost(orderId);
         settlement.setPurchaseCost(purchaseCost);
@@ -299,7 +273,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
                 totalCost = totalCost.add(batch.getUnitCost().multiply(BigDecimal.valueOf(batch.getQuantity())));
             } else if (batch.getPurPrice() != null && batch.getQuantity() != null) {
                 totalCost = totalCost.add(batch.getPurPrice().multiply(BigDecimal.valueOf(batch.getQuantity())));
-            }
+            } else throw new IllegalStateException("出库批次成本资料缺失，请核对后结算");
         }
         return totalCost;
     }
@@ -311,9 +285,9 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
 
         BigDecimal totalShippingFee = BigDecimal.ZERO;
         for (OOrderStocking stocking : stockings) {
-            if (stocking.getShippingCost() != null) {
-                totalShippingFee = totalShippingFee.add(stocking.getShippingCost());
-            }
+            if(!Integer.valueOf(0).equals(stocking.getType()))throw new IllegalStateException("非本地履约采购成本口径未完整提供，不能自动结算");
+            if(stocking.getShippingCost()==null)throw new IllegalStateException("发货运费资料缺失，请明确金额后结算");
+            totalShippingFee = totalShippingFee.add(stocking.getShippingCost());
         }
         return totalShippingFee;
     }
@@ -322,18 +296,24 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
         QueryWrapper<FmsExpenseItem> wrapper = new QueryWrapper<>();
         wrapper.eq("order_id", Long.valueOf(orderId));
         wrapper.eq("settlement_status", 0);
+        wrapper.last(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive() ? "LIMIT 10001 FOR UPDATE" : "LIMIT 10001");
         List<FmsExpenseItem> items = expenseItemMapper.selectList(wrapper);
 
+        if(items.size()>10000)throw new IllegalStateException("单订单费用明细超过结算处理上限，请先核对");
         Map<Integer, BigDecimal> expenseMap = new HashMap<>();
-        for (FmsExpenseItem item : items) {
-            FmsExpense expense = expenseMapper.selectById(item.getExpenseId());
-            if (expense != null && expense.getStatus() == 5) {
-                Integer expenseType = expense.getExpenseType();
-                BigDecimal amount = item.getAmount();
-                if (amount == null) {
-                    amount = BigDecimal.ZERO;
-                }
-                expenseMap.merge(expenseType, amount, BigDecimal::add);
+        if(items.isEmpty())return expenseMap;
+        var expenseIds=items.stream().map(FmsExpenseItem::getExpenseId).filter(Objects::nonNull).distinct().toList();
+        var headers=new HashMap<Long,FmsExpense>();
+        for(int start=0;start<expenseIds.size();start+=500) {
+            var query=new QueryWrapper<FmsExpense>().in("id",expenseIds.subList(start,Math.min(start+500,expenseIds.size()))).orderByAsc("id");
+            if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())query.last("FOR UPDATE");
+            for(var expense:expenseMapper.selectList(query))headers.put(expense.getId(),expense);
+        }
+        for(FmsExpenseItem item:items) {
+            var expense=headers.get(item.getExpenseId());
+            if(expense!=null && Integer.valueOf(5).equals(expense.getStatus())) {
+                if(expense.getExpenseType()==null || item.getAmount()==null)throw new IllegalStateException("费用类型或金额缺失，请先核对");
+                expenseMap.merge(expense.getExpenseType(),item.getAmount(),BigDecimal::add);
             }
         }
         return expenseMap;
@@ -342,7 +322,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
     private void saveSettlementItems(FmsOrderSettlement settlement) {
         List<FmsOrderSettlementItem> items = new ArrayList<>();
 
-        if (settlement.getPurchaseCost().compareTo(BigDecimal.ZERO) > 0) {
+        if (settlement.getPurchaseCost().compareTo(BigDecimal.ZERO) != 0) {
             FmsOrderSettlementItem item = new FmsOrderSettlementItem();
             item.setSettlementId(settlement.getId());
             item.setItemType(1);
@@ -352,7 +332,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             items.add(item);
         }
 
-        if (settlement.getShippingFee().compareTo(BigDecimal.ZERO) > 0) {
+        if (settlement.getShippingFee().compareTo(BigDecimal.ZERO) != 0) {
             FmsOrderSettlementItem item = new FmsOrderSettlementItem();
             item.setSettlementId(settlement.getId());
             item.setItemType(2);
@@ -362,7 +342,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             items.add(item);
         }
 
-        if (settlement.getPlatformFee().compareTo(BigDecimal.ZERO) > 0) {
+        if (settlement.getPlatformFee().compareTo(BigDecimal.ZERO) != 0) {
             FmsOrderSettlementItem item = new FmsOrderSettlementItem();
             item.setSettlementId(settlement.getId());
             item.setItemType(4);
@@ -372,7 +352,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             items.add(item);
         }
 
-        if (settlement.getMarketingFee().compareTo(BigDecimal.ZERO) > 0) {
+        if (settlement.getMarketingFee().compareTo(BigDecimal.ZERO) != 0) {
             FmsOrderSettlementItem item = new FmsOrderSettlementItem();
             item.setSettlementId(settlement.getId());
             item.setItemType(5);
@@ -382,7 +362,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             items.add(item);
         }
 
-        if (settlement.getOtherFee().compareTo(BigDecimal.ZERO) > 0) {
+        if (settlement.getOtherFee().compareTo(BigDecimal.ZERO) != 0) {
             FmsOrderSettlementItem item = new FmsOrderSettlementItem();
             item.setSettlementId(settlement.getId());
             item.setItemType(99);
@@ -393,7 +373,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
         }
 
         for (FmsOrderSettlementItem item : items) {
-            settlementItemMapper.insert(item);
+            requireWrite(settlementItemMapper.insert(item));
         }
     }
 
@@ -403,7 +383,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
             order.setSettlementStatus(1);
             order.setSettlementId(settlementId);
             order.setSettlementTime(LocalDateTime.now());
-            orderMapper.updateOOrder(order);
+            requireWrite(orderMapper.updateOOrder(order));
         }
     }
 
@@ -411,13 +391,21 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
         QueryWrapper<FmsExpenseItem> wrapper = new QueryWrapper<>();
         wrapper.eq("order_id", orderId);
         wrapper.eq("settlement_status", 0);
-        List<FmsExpenseItem> items = expenseItemMapper.selectList(wrapper);
+        wrapper.last("LIMIT 10001");
+        List<FmsExpenseItem> candidates = expenseItemMapper.selectList(wrapper);
+        if(candidates.size()>10000)throw new IllegalStateException("费用明细超过结算处理上限");
+        var approved=new HashMap<Long,FmsExpense>();
+        var ids=candidates.stream().map(FmsExpenseItem::getExpenseId).filter(Objects::nonNull).distinct().sorted().toList();
+        for(int start=0;start<ids.size();start+=500)
+            for(var expense:expenseMapper.selectList(new QueryWrapper<FmsExpense>().in("id",ids.subList(start,Math.min(start+500,ids.size()))).orderByAsc("id").last("FOR UPDATE")))
+                if(Integer.valueOf(5).equals(expense.getStatus()))approved.put(expense.getId(),expense);
+        List<FmsExpenseItem> items=candidates.stream().filter(item->approved.containsKey(item.getExpenseId())).toList();
 
         for (FmsExpenseItem item : items) {
             item.setSettlementStatus(1);
             item.setSettlementId(settlementId);
             item.setSettlementTime(LocalDateTime.now());
-            expenseItemMapper.updateById(item);
+            requireWrite(expenseItemMapper.updateById(item));
         }
 
         if (!items.isEmpty()) {
@@ -436,7 +424,7 @@ public class FmsOrderSettlementServiceImpl extends ServiceImpl<FmsOrderSettlemen
                         expense.setSettlementStatus(1);
                         expense.setSettlementId(settlementId);
                         expense.setSettlementTime(LocalDateTime.now());
-                        expenseMapper.updateById(expense);
+                        requireWrite(expenseMapper.updateById(expense));
                     }
                 }
             }

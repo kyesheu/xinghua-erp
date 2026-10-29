@@ -160,15 +160,22 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         int ss = (int) s.toEpochSecond(ZoneOffset.ofHours(8)), ee = (int) e.toEpochSecond(ZoneOffset.ofHours(8));
         String pp = "{st:" + s.format(DT) + "}";
         try {
-            var r = PddOrderApiHelper.pullOrderList(p.getAppKey(), p.getAppSecret(), p.getAccessToken(), ss, ee, 1, 100);
-            if (r.getCode() != 0) return errLog(shop, "ORDER", r.getMsg(), pp, begin);
-            int ins = 0, upd = 0, fail = 0;
+            int ins=0,upd=0,fail=0;boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"ORDER","订单拉取取消或超时，尚未完成",begin);
+                var r=PddOrderApiHelper.pullOrderList(p.getAppKey(),p.getAppSecret(),p.getAccessToken(),ss,ee,page,100);
+                if(r==null || r.getCode()!=0 || r.getData()==null || r.getData().getOrderList()==null)return err(shop,"ORDER","订单分页查询失败，尚未完成",begin);
             if (r.getData() != null && r.getData().getOrderList() != null) for (var t : r.getData().getOrderList()) {
                 try { var sr = shopOrderService.saveOrder(shop.getId(), shop.getMerchantId(), shop.getType(), toOrder(t));
                     if (sr.getData() != null && sr.getData() > 0) shopSyncService.syncOrder(sr.getData());
                     if (sr.getCode() == 0) ins++; else if (sr.getCode() == 1800) upd++; else fail++;
                 } catch (Exception ex) { log.error("PDD订单保存失败", ex); fail++; }
             }
+                if(!Boolean.TRUE.equals(r.getData().getHasNext())){complete=true;break;}
+                if(r.getData().getOrderList().isEmpty())return err(shop,"ORDER","订单分页为空但仍声明下一页，请核对",begin);
+            }
+            if(!complete)return err(shop,"ORDER","订单分页达到上限，尚未完成，请缩小日期范围",begin);
+            if(fail>0)return err(shop,"ORDER","订单部分保存失败："+fail+"条，请重试核对",begin);
             logMsg(shop, "ORDER", pp, "{ins:" + ins + ",upd:" + upd + ",fail:" + fail + "}", begin);
             return ResultVo.success("成功，新增" + ins + "，更新" + upd + "，失败" + fail);
         } catch (Exception ex) { return err(shop, "ORDER", "PDD:" + ex.getMessage(), begin); }
@@ -217,15 +224,30 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         int ss = (int) st.toEpochSecond(ZoneOffset.ofHours(8)), ee = (int) et.toEpochSecond(ZoneOffset.ofHours(8));
         String pp = "{st:" + st.format(DT) + "}";
         try {
-            var r = PddRefundApiHelper.pullRefundList(p.getAppKey(), p.getAppSecret(), p.getAccessToken(), ss, ee, 1, 20);
-            if (r.getCode() != 0) return errLog(shop, "REFUND", r.getMsg(), pp, begin);
-            int ins = 0, fail = 0;
-            if (r.getList() != null) for (var rf : r.getList()) {
-                try { var rr = shopRefundService.saveRefund(shop.getId(), toRefund(rf));
-                    if (rr.getData() != null) { shopSyncService.syncRefund(rr.getData()); ins++; } else fail++;
-                } catch (Exception ex) { fail++; log.error("PDD退款保存失败", ex); }
+            int ins=0,fail=0,seen=0;boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"REFUND","售后拉取取消或超时，尚未完成",begin);
+                var r=PddRefundApiHelper.pullRefundList(p.getAppKey(),p.getAppSecret(),p.getAccessToken(),ss,ee,page,20);
+                if(r==null || r.getCode()!=0 || r.getList()==null)return err(shop,"REFUND","售后分页查询失败，尚未完成",begin);
+                for(var rf:r.getList()) {
+                    try {
+                        var saved=shopRefundService.saveRefund(shop.getId(),toRefund(rf));
+                        if(saved==null || saved.getData()==null || (saved.getCode()!=0 && saved.getCode()!=1800)){fail++;continue;}
+                        var synced=shopSyncService.syncRefund(saved.getData());
+                        if(synced==null || synced.getCode()!=0)fail++;else ins++;
+                    } catch(RuntimeException failure){fail++;}
+                }
+                seen+=r.getList().size();Integer total=r.getTotalRecords();
+                if(total!=null && total>=0 && seen>=total){complete=true;break;}
+                if(r.getList().isEmpty()) {
+                    if(total!=null && seen<total)return err(shop,"REFUND","售后分页提前结束，尚未完成",begin);
+                    complete=true;break;
+                }
+                if(total==null && r.getList().size()<20){complete=true;break;}
             }
-            if (fail == 0) upsertLt(shop.getId(), "REFUND", et, lt);
+            if(!complete)return err(shop,"REFUND","售后分页达到上限，尚未完成，请分批处理",begin);
+            if(fail>0)return err(shop,"REFUND","售后部分处理失败："+fail+"条，请重试核对",begin);
+            upsertLt(shop.getId(),"REFUND",et,lt);
             logMsg(shop, "REFUND", pp, "{ins:" + ins + ",fail:" + fail + "}", begin);
             return ResultVo.success("成功，新增" + ins + "条");
         } catch (Exception ex) { return err(shop, "REFUND", "PDD:" + ex.getMessage(), begin); }
@@ -258,12 +280,30 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     private ResultVo<String> pullPddGoods(OShop shop, Integer pullType, long begin) {
         var p = chk(shop, 300); if (p == null) return err(shop, "GOODS", "校验失败", begin);
         try {
-            var r = PddGoodsApiHelper.pullGoodsList(p.getAppKey(), p.getAppSecret(), p.getAccessToken(), 1, 20);
-            if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
-            if (r.getData() != null && r.getData().getGoodsList() != null) for (var g : r.getData().getGoodsList()) {
-                try { shopGoodsService.savePddGoods(toGoods(g), shop.getId()); success++; } catch (Exception ex) { log.error("PDD商品保存失败", ex); }
+            int success=0,failed=0,seen=0;
+            boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)
+                    return err(shop,"GOODS","商品拉取取消或超时，尚未完成，请重试核对",begin);
+                var r=PddGoodsApiHelper.pullGoodsList(p.getAppKey(),p.getAppSecret(),p.getAccessToken(),page,20);
+                if(r==null || r.getCode()!=0 || r.getData()==null || r.getData().getGoodsList()==null)
+                    return err(shop,"GOODS","商品分页查询失败，尚未完成，请重试核对",begin);
+                var data=r.getData();var records=data.getGoodsList();
+                for(var goods:records) {
+                    try {savePulledGoods(toGoods(goods),shop.getId());success++;}
+                    catch(RuntimeException failure){failed++;}
+                }
+                seen+=records.size();
+                Integer total=data.getTotalCount();
+                if(total!=null && total>=0 && seen>=total){complete=true;break;}
+                if(records.isEmpty()) {
+                    if(total!=null && seen<total)return err(shop,"GOODS","商品分页提前结束，请重新拉取核对",begin);
+                    complete=true;break;
+                }
+                if(total==null && records.size()<20){complete=true;break;}
             }
+            if(!complete)return err(shop,"GOODS","商品分页达到单次上限，尚未完成，请缩小范围或分批处理",begin);
+            if(failed>0)return err(shop,"GOODS","商品拉取部分失败，成功"+success+"件，失败"+failed+"件，请重试核对",begin);
             upsertLt(shop.getId(), "GOODS", LocalDateTime.now(), null);
             logMsg(shop, "GOODS", "{pullType:" + pullType + "}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
@@ -392,10 +432,11 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         try {
             var r = TaoGoodsApiHelper.pullGoodsList(p.getAppKey(), p.getAppSecret(), p.getAccessToken());
             if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
+            int success = 0; int failed = 0;
             if (r.getList() != null) for (Object gObj : r.getList()) {
-                try { shopGoodsService.savePddGoods(taoGoods((JsonNode)(Object)gObj), shop.getId()); success++; } catch (Exception ex) { log.error("TAO商品保存失败", ex); }
+                try { savePulledGoods(taoGoods((JsonNode)(Object)gObj), shop.getId()); success++; } catch (Exception ex) { failed++; log.warn("TAO商品保存失败，错误类型={}", ex.getClass().getSimpleName()); }
             }
+            if (failed > 0) return err(shop, "GOODS", "商品拉取部分失败，成功" + success + "件，失败" + failed + "件，请重试核对", begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "TAO:" + ex.getMessage(), begin); }
@@ -568,14 +609,15 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         try {
             var r = JdGoodsApiHelper.pullGoodsSkuList(p.getAppKey(), p.getAppSecret(), p.getAccessToken());
             if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
+            int success = 0; int failed = 0;
             if (r.getList() != null) for (var g : r.getList()) {
                 try { ShopGoods sg = new ShopGoods(); sg.setProductId(g.getSkuId() != null ? g.getSkuId().toString() : null);
                     sg.setTitle(g.getSkuName()); sg.setImg(g.getLogo());
                     sg.setOuterProductId(g.getOuterId()); sg.setMinPrice(g.getJdPrice());
-                    shopGoodsService.savePddGoods(sg, shop.getId()); success++;
-                } catch (Exception ex) { log.error("JD商品保存失败", ex); }
+                    savePulledGoods(sg, shop.getId()); success++;
+                } catch (Exception ex) { failed++; log.warn("JD商品保存失败，错误类型={}", ex.getClass().getSimpleName()); }
             }
+            if (failed > 0) return err(shop, "GOODS", "商品拉取部分失败，成功" + success + "件，失败" + failed + "件，请重试核对", begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "JD:" + ex.getMessage(), begin); }
@@ -590,15 +632,27 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         LocalDateTime e = StringUtils.hasText(endTime) ? LocalDateTime.parse(endTime + " 23:59:59", DT) : LocalDateTime.parse(startTime + " 23:59:59", DT);
         String pp = "{st:" + s.format(DT) + "}";
         try {
-            var r = DouOrderApiHelper.pullOrderList(s.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, e.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, 1, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
-            if (r.getCode() != 0) return errLog(shop, "ORDER", r.getMsg(), pp, begin);
-            int ins = 0, upd = 0, fail = 0;
+            int ins=0,upd=0,fail=0,seen=0;boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"ORDER","拉取取消或超时，尚未完成",begin);
+                var r=DouOrderApiHelper.pullOrderList(s.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, e.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, page, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
+                if(r==null || r.getCode()!=0 || r.getList()==null)return err(shop,"ORDER","分页查询失败，尚未完成",begin);
             if (r.getList() != null) for (var order : r.getList()) {
                 try { var sr = shopOrderService.saveOrder(shop.getId(), shop.getMerchantId(), shop.getType(), douOrder(order));
                     if (sr.getData() != null && sr.getData() > 0) shopSyncService.syncOrder(sr.getData());
-                    if (sr.getCode() == 0) ins++; else upd++;
+                    if (sr.getCode() == 0) ins++; else if(sr.getCode()==1800) upd++; else fail++;
                 } catch (Exception ex) { log.error("DOU订单保存失败", ex); fail++; }
             }
+                seen+=r.getList().size();Integer total=r.getTotalRecords();
+                if(total!=null && total>=0 && seen>=total){complete=true;break;}
+                if(r.getList().isEmpty()) {
+                    if(total!=null && seen<total)return err(shop,"ORDER","分页提前结束，尚未完成",begin);
+                    complete=true;break;
+                }
+                if(total==null && r.getList().size()<100){complete=true;break;}
+            }
+            if(!complete)return err(shop,"ORDER","分页达到上限，尚未完成，请缩小日期范围",begin);
+            if(fail>0)return err(shop,"ORDER","部分处理失败："+fail+"条，请重试核对",begin);
             logMsg(shop, "ORDER", pp, "{ins:" + ins + ",upd:" + upd + ",fail:" + fail + "}", begin);
             return ResultVo.success("成功，新增" + ins + "，更新" + upd + "，失败" + fail);
         } catch (Exception ex) { return err(shop, "ORDER", "DOU:" + ex.getMessage(), begin); }
@@ -671,16 +725,30 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         LocalDateTime et = LocalDateTime.now();
         String pp = "{st:" + st.format(DT) + "}";
         try {
-            var r = DouRefundApiHelper.pullAfterSaleList(st.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, et.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, 1, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
-            if (r.getCode() != 0) return errLog(shop, "REFUND", r.getMsg(), pp, begin);
-            int ins = 0, fail = 0;
+            int ins=0,fail=0,seen=0;boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"REFUND","拉取取消或超时，尚未完成",begin);
+                var r=DouRefundApiHelper.pullAfterSaleList(st.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, et.toEpochSecond(ZoneOffset.ofHours(8)) * 1000, page, 100, p.getAppKey(), p.getAppSecret(), p.getAccessToken());
+                if(r==null || r.getCode()!=0 || r.getList()==null)return err(shop,"REFUND","分页查询失败，尚未完成",begin);
             if (r.getList() != null) for (var rf : r.getList()) {
                 try { ShopRefund sr = douRefund(rf);
                     var rr = shopRefundService.saveRefund(shop.getId(), sr);
-                    if (rr.getData() != null) { shopSyncService.syncRefund(rr.getData()); ins++; } else fail++;
+                    if (rr!=null && (rr.getCode()==0 || rr.getCode()==1800) && rr.getData()!=null) {
+                        var synced=shopSyncService.syncRefund(rr.getData());if(synced!=null && synced.getCode()==0)ins++;else fail++;
+                    } else fail++;
                 } catch (Exception ex) { log.error("DOU退款保存失败", ex); fail++; }
             }
-            if (fail == 0) upsertLt(shop.getId(), "REFUND", et, lt);
+                seen+=r.getList().size();Integer total=r.getTotalRecords();
+                if(total!=null && total>=0 && seen>=total){complete=true;break;}
+                if(r.getList().isEmpty()) {
+                    if(total!=null && seen<total)return err(shop,"REFUND","分页提前结束，尚未完成",begin);
+                    complete=true;break;
+                }
+                if(total==null && r.getList().size()<100){complete=true;break;}
+            }
+            if(!complete)return err(shop,"REFUND","分页达到上限，尚未完成，请缩小日期范围",begin);
+            if(fail>0)return err(shop,"REFUND","部分处理失败："+fail+"条，请重试核对",begin);
+            upsertLt(shop.getId(),"REFUND",et,lt);
             logMsg(shop, "REFUND", pp, "{ins:" + ins + ",fail:" + fail + "}", begin);
             return ResultVo.success("成功，新增" + ins + "条");
         } catch (Exception ex) { return err(shop, "REFUND", "DOU:" + ex.getMessage(), begin); }
@@ -719,14 +787,24 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     private ResultVo<String> pullDouGoods(OShop shop, long begin) {
         var p = chk(shop, 400); if (p == null) return err(shop, "GOODS", "校验失败", begin);
         try {
-            var r = DouGoodsApiHelper.getGoodsList(p.getAppKey(), p.getAppSecret(), p.getAccessToken(), 1, 20);
-            if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
-            if (r.getData() != null && r.getData().getGoodsList() != null) for (var g : r.getData().getGoodsList()) {
-                try { ShopGoods sg = douGoods(g);
-                    shopGoodsService.savePddGoods(sg, shop.getId()); success++;
-                } catch (Exception ex) { log.error("DOU商品保存失败", ex); }
+            int success=0,failed=0,seen=0;boolean complete=false;
+            for(int page=1;page<=500;page++) {
+                if(Thread.currentThread().isInterrupted() || System.currentTimeMillis()-begin>90000)return err(shop,"GOODS","商品拉取取消或超时，尚未完成",begin);
+                var r=DouGoodsApiHelper.getGoodsList(p.getAppKey(),p.getAppSecret(),p.getAccessToken(),page,20);
+                if(r==null || r.getCode()!=0 || r.getData()==null || r.getData().getGoodsList()==null)return err(shop,"GOODS","商品分页查询失败，尚未完成",begin);
+                for(var goods:r.getData().getGoodsList()) {
+                    try{savePulledGoods(douGoods(goods),shop.getId());success++;}catch(RuntimeException failure){failed++;}
+                }
+                var rows=r.getData().getGoodsList();seen+=rows.size();Integer total=r.getData().getTotal();
+                if(total!=null && total>=0 && seen>=total){complete=true;break;}
+                if(rows.isEmpty()) {
+                    if(total!=null && seen<total)return err(shop,"GOODS","商品分页提前结束，尚未完成",begin);
+                    complete=true;break;
+                }
+                if(total==null && rows.size()<20){complete=true;break;}
             }
+            if(!complete)return err(shop,"GOODS","商品分页达到上限，尚未完成",begin);
+            if(failed>0)return err(shop,"GOODS","商品部分保存失败："+failed+"件，请重试核对",begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "DOU:" + ex.getMessage(), begin); }
@@ -902,10 +980,11 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         try {
             var r = WeiGoodsApiHelper.pullGoodsList(p.getAccessToken());
             if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
+            int success = 0; int failed = 0;
             if (r.getList() != null) for (var g : r.getList()) {
-                try { shopGoodsService.savePddGoods(weiGoods(g), shop.getId()); success++; } catch (Exception ex) { log.error("WEI商品保存失败", ex); }
+                try { savePulledGoods(weiGoods(g), shop.getId()); success++; } catch (Exception ex) { failed++; log.warn("WEI商品保存失败，错误类型={}", ex.getClass().getSimpleName()); }
             }
+            if (failed > 0) return err(shop, "GOODS", "商品拉取部分失败，成功" + success + "件，失败" + failed + "件，请重试核对", begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "WEI:" + ex.getMessage(), begin); }
@@ -1058,10 +1137,11 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         try {
             var r = KwaiGoodsApiHelper.pullGoodsAll(p.getAppKey(), p.getAppSecret(), p.getAppSecret(), p.getAccessToken());
             if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
+            int success = 0; int failed = 0;
             if (r.getList() != null) for (var g : r.getList()) {
-                try { shopGoodsService.savePddGoods(kwaiGoods(g), shop.getId()); success++; } catch (Exception ex) { log.error("KWAI商品保存失败", ex); }
+                try { savePulledGoods(kwaiGoods(g), shop.getId()); success++; } catch (Exception ex) { failed++; log.warn("KWAI商品保存失败，错误类型={}", ex.getClass().getSimpleName()); }
             }
+            if (failed > 0) return err(shop, "GOODS", "商品拉取部分失败，成功" + success + "件，失败" + failed + "件，请重试核对", begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "KWAI:" + ex.getMessage(), begin); }
@@ -1216,10 +1296,11 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
         try {
             var r = xhsGoodsApiHelper.pullGoodsItemListVo(p.getAppKey(), p.getAppSecret(), p.getAccessToken());
             if (r.getCode() != 0) return errLog(shop, "GOODS", r.getMsg(), "{}", begin);
-            int success = 0;
+            int success = 0; int failed = 0;
             if (r.getList() != null) for (var g : r.getList()) {
-                try { shopGoodsService.savePddGoods(xhsGoods(g), shop.getId()); success++; } catch (Exception ex) { log.error("XHS商品保存失败", ex); }
+                try { savePulledGoods(xhsGoods(g), shop.getId()); success++; } catch (Exception ex) { failed++; log.warn("XHS商品保存失败，错误类型={}", ex.getClass().getSimpleName()); }
             }
+            if (failed > 0) return err(shop, "GOODS", "商品拉取部分失败，成功" + success + "件，失败" + failed + "件，请重试核对", begin);
             logMsg(shop, "GOODS", "{}", "{success:" + success + "}", begin);
             return ResultVo.success("拉取成功" + success + "件");
         } catch (Exception ex) { return err(shop, "GOODS", "XHS:" + ex.getMessage(), begin); }
@@ -1246,6 +1327,10 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
 
     // ======================== 工具 ========================
 
+    private void savePulledGoods(ShopGoods goods, Long shopId) {
+        var result=shopGoodsService.savePddGoods(goods,shopId);
+        if(result==null || result.getCode()!=0)throw new IllegalStateException("商品保存未成功");
+    }
     private OShop getShop(Long shopId) { if (shopId == null || shopId <= 0) return null; return shopService.getById(shopId); }
     private ShopApiParams chk(OShop shop, int expectedType) { return shopApiCommon.checkBefore(shop.getId(), expectedType).getData(); }
     private Integer fen(String s) { if (!StringUtils.hasText(s)) return 0; try { return (int) Math.round(Double.parseDouble(s) * 100); } catch (Exception e) { return 0; } }
@@ -1265,11 +1350,7 @@ public class ShopPullApiServiceImpl implements ShopPullApiService {
     }
     private ResultVo<String> err(OShop shop, String type, String msg, long begin) { logMsg(shop, type, "{}", "error:" + msg, begin); return ResultVo.error(msg); }
     private ResultVo<String> errLog(OShop shop, String type, String msg, String pParams, long begin) { logMsg(shop, type, pParams, "error:" + msg, begin); return ResultVo.error(msg); }
-    private void upsertLt(Long shopId, String pullType, LocalDateTime lasttime, OShopPullLasttime exist) {
-        try { if (exist == null) { OShopPullLasttime ins = new OShopPullLasttime(); ins.setShopId(shopId); ins.setPullType(pullType);
-            ins.setLasttime(lasttime); ins.setCreateTime(LocalDateTime.now()); pullLasttimeService.save(ins);
-        } else { OShopPullLasttime up = new OShopPullLasttime(); up.setId(exist.getId()); up.setLasttime(lasttime);
-            up.setUpdateTime(LocalDateTime.now()); pullLasttimeService.updateById(up); }
-        } catch (Exception e) { log.error("更新最后拉取时间失败", e); }
+    private void upsertLt(Long shopId,String pullType,LocalDateTime lasttime,OShopPullLasttime exist) {
+        if(!pullLasttimeService.advance(shopId,pullType,lasttime))throw new IllegalStateException("拉取数据已处理，但进度保存失败，请重试核对");
     }
 }

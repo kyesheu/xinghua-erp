@@ -19,6 +19,7 @@ public interface OrderFacade {
     int updateOOrderItem(OOrderItem entity);
     OOrder getOOrderOne(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrder> wrapper);
     int updateOOrder(OOrder entity);
+    int clearOrderSettlement(Long orderId, Long settlementId);
     java.util.List<ShopOrderItem> listShopOrderItem(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrderItem> wrapper);
     int updateShopOrderItem(ShopOrderItem entity, com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrderItem> wrapper);
     int updateShopOrderItem(ShopOrderItem entity);

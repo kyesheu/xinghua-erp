@@ -10,7 +10,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,6 +35,14 @@ public class PythonAgentClient {
     /** 流式对话的读超时：按段返回，前端总时长上限 180s，这里留出余量。 */
     private static final int STREAM_READ_TIMEOUT_MILLIS = 180000;
 
+    private static final java.util.concurrent.ScheduledExecutorService STREAM_WATCHDOG = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        var thread=new Thread(r,"ai-stream-watchdog");thread.setDaemon(true);return thread;
+    });
+    private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(PythonAgentClient.class);
+    private static final okhttp3.OkHttpClient HTTP=new okhttp3.OkHttpClient.Builder()
+            .proxy(java.net.Proxy.NO_PROXY).followRedirects(false).followSslRedirects(false)
+            .retryOnConnectionFailure(false).connectTimeout(3,java.util.concurrent.TimeUnit.SECONDS)
+            .writeTimeout(10,java.util.concurrent.TimeUnit.SECONDS).callTimeout(90,java.util.concurrent.TimeUnit.SECONDS).build();
     private final URI endpoint;
     private final String secret;
     private final Path configFile;
@@ -43,7 +50,11 @@ public class PythonAgentClient {
     private final Transport transport;
     private final Transport modelTransport;
 
-    public record Response(int status, String body) {}
+    @Autowired private AiRequestAdmission admission;
+
+    public record Response(int status, String body, String usage) {
+        public Response(int status,String body) { this(status,body,null); }
+    }
 
     /**
      * 单次调用的请求头集合。模型参数取自「AI 智能 &gt; 模型配置」页面保存的记录，
@@ -115,8 +126,8 @@ public class PythonAgentClient {
                 header(config.getApiEndpoint()), header(config.getModelName()), toolToken == null ? "" : toolToken);
         requireUsable(headers);
         try {
-            Response response = transport.send(endpoint.resolve("/internal/model-ping"), headers,
-                    JsonUtils.write(Map.of()).getBytes(StandardCharsets.UTF_8));
+            Response response = guardedSend(endpoint.resolve("/internal/model-ping"), headers,
+                    JsonUtils.write(Map.of()).getBytes(StandardCharsets.UTF_8), transport);
             if (response.status() != 200) throw new IllegalStateException(failure(response.status(), response.body()));
             return JsonUtils.readTree(response.body());
         } catch (IOException e) {
@@ -134,24 +145,47 @@ public class PythonAgentClient {
     public void stream(String path, Object body, String toolToken, StreamListener listener) {
         AgentHeaders headers = callHeaders(toolToken);
         requireUsable(headers);
-        var connection = open(endpoint.resolve(path), headers, JsonUtils.write(body).getBytes(StandardCharsets.UTF_8), STREAM_READ_TIMEOUT_MILLIS);
-        try {
-            int status = connection.getResponseCode();
-            if (status != 200) throw new IllegalStateException(failure(status, read(connection.getErrorStream(), 2000)));
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+        byte[] encoded=JsonUtils.write(body).getBytes(StandardCharsets.UTF_8);
+        if(encoded.length>524288)throw new IllegalArgumentException("AI请求资料过大，请缩小范围");
+        var permit = begin(headers, path);
+        if(permit!=null)org.slf4j.MDC.put("aiCallId",permit.id());
+        var call=newCall(endpoint.resolve(path),headers,encoded,STREAM_READ_TIMEOUT_MILLIS);
+        var owner=Thread.currentThread();
+        var watchdog=STREAM_WATCHDOG.scheduleAtFixedRate(()->{if(owner.isInterrupted())call.cancel();},100,100,java.util.concurrent.TimeUnit.MILLISECONDS);
+        boolean[] done={false};String[] usage={null};String[] outcome={"UNKNOWN"};
+        try(var response=call.execute()) {
+            if(response.code()!=200){outcome[0]=response.code()>=500?"UPSTREAM_ERROR":"REJECTED";throw new IllegalStateException(failure(response.code(),read(response.body()==null?null:response.body().byteStream(),2000)));}
+            if(response.body()==null)throw new IOException("AI服务返回空响应");
+            try(var reader=new BufferedReader(response.body().charStream())) {
                 String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.isBlank()) dispatch(line, listener);
+                while((line=readLineBounded(reader))!=null) {
+                    if(owner.isInterrupted())throw new IOException("AI请求已取消");
+                    if(!line.isBlank())dispatch(line,(type,content)->{
+                        if("usage".equals(type))usage[0]=content;
+                        else if(done[0])throw new IllegalStateException("AI流在完成后返回额外内容");
+                        else if("upstream_error".equals(type)){outcome[0]="UPSTREAM_ERROR";listener.onEvent("error",content);}
+                        else {if("error".equals(type))outcome[0]="ERROR";if("done".equals(type))done[0]=true;listener.onEvent(type,content);}
+                    });
                 }
+                if("UNKNOWN".equals(outcome[0]) && !done[0]){outcome[0]="TRUNCATED";throw new IllegalStateException("AI输出未完成，请重试");}
+                if("UNKNOWN".equals(outcome[0]))outcome[0]="COMPLETED";
             }
-        } catch (IOException e) {
-            throw new IllegalStateException("AI 服务响应中断", e);
+        } catch(IOException error) {
+            outcome[0]=owner.isInterrupted()?"CANCELLED":"UPSTREAM_ERROR";
+            throw new IllegalStateException("AI服务响应中断",error);
         } finally {
-            connection.disconnect();
+            watchdog.cancel(false);call.cancel();
+            try {settle(permit,usage[0],outcome[0]);} finally {org.slf4j.MDC.remove("aiCallId");}
         }
     }
 
-    /** 单行 NDJSON 转事件；解析不了的行走 message 兜底，避免整段输出因一行格式问题丢失。 */
+    static String readLineBounded(java.io.Reader reader) throws IOException {
+        var line=new StringBuilder();int value;
+        while((value=reader.read())!=-1){if(value=='\n')break;if(value!='\r')line.append((char)value);if(line.length()>65536)throw new IOException("AI流式事件过大");}
+        return value==-1 && line.isEmpty()?null:line.toString();
+    }
+
+    /** 严格解析 NDJSON 事件，禁止将错误页或调试文本当作模型答案。 */
     static void dispatch(String line, StreamListener listener) {
         String type = "message";
         String content = line;
@@ -161,8 +195,9 @@ public class PythonAgentClient {
             if (parsedType != null && !parsedType.isBlank()) type = parsedType;
             String parsedContent = JsonUtils.text(node, "content");
             content = parsedContent == null ? "" : parsedContent;
-        } catch (RuntimeException ignored) {
-            // 非 JSON 行按纯文本透出，保留内容比丢弃更接近可用。
+            if("error".equals(type) && "UPSTREAM".equals(JsonUtils.text(node,"code")))type="upstream_error";
+        } catch (RuntimeException invalid) {
+            throw new IllegalStateException("AI服务返回无效流式事件",invalid);
         }
         listener.onEvent(type, content);
     }
@@ -171,7 +206,7 @@ public class PythonAgentClient {
         AgentHeaders headers = callHeaders(toolToken);
         requireUsable(headers);
         try {
-            Response response = transport.send(target, headers, JsonUtils.write(facts).getBytes(StandardCharsets.UTF_8));
+            Response response = guardedSend(target, headers, JsonUtils.write(facts).getBytes(StandardCharsets.UTF_8), transport);
             if (response.status() != 200 || response.body().length() > 1000000) {
                 throw new IllegalStateException(failure(response.status(), response.body()));
             }
@@ -179,6 +214,49 @@ public class PythonAgentClient {
         } catch (IOException e) {
             throw new IllegalStateException("无法连接本机 AI 服务", e);
         }
+    }
+
+    private boolean isRuleOnly(URI target,byte[] body) {
+        if(!java.util.Set.of("/internal/inventory-analysis","/internal/management-analysis","/internal/marketing-analysis","/internal/risk-analysis").contains(target.getPath()))return false;
+        var facts=JsonUtils.readTree(new String(body,StandardCharsets.UTF_8));
+        var useModel=facts.get("useModel");
+        return facts.isObject() && (useModel==null || useModel.isBoolean() && !useModel.asBoolean());
+    }
+
+    private AiRequestAdmission.Permit begin(AgentHeaders headers,String path) {
+        if (admission == null || path.contains("inventory-review/sync")) return null;
+        return admission.begin(headers.toolToken(),path,headers.modelName());
+    }
+
+    private Response guardedSend(URI target,AgentHeaders headers,byte[] body,Transport selected) throws IOException {
+        if(body.length>524288)throw new IllegalArgumentException("AI请求资料过大，请缩小范围");
+        var permit=isRuleOnly(target,body)?null:begin(headers,target.getPath());
+        if(permit!=null)org.slf4j.MDC.put("aiCallId",permit.id());
+        long started=System.nanoTime();
+        String usage=null;
+        String outcome="UNKNOWN";
+        try {
+            var response=selected.send(target,headers,body);
+            usage=response.usage();outcome=response.status()==200?"COMPLETED":response.status()>=500?"UPSTREAM_ERROR":"REJECTED";
+            if(response.status()==200) {
+                var data=JsonUtils.readTree(response.body());
+                if("unavailable".equals(JsonUtils.text(data,"modelStatus")) || "unavailable".equals(JsonUtils.text(data,"status")))outcome="UPSTREAM_ERROR";
+            }
+            return response;
+        } catch(IOException error) {outcome="UPSTREAM_ERROR";throw error;}
+        finally {try {settle(permit,usage,outcome);} finally {LOG.info("AI call requestId={} path={} elapsedMs={} outcome={}",permit==null?org.slf4j.MDC.get("requestId"):permit.id(),target.getPath(),(System.nanoTime()-started)/1_000_000,outcome);org.slf4j.MDC.remove("aiCallId");}}
+    }
+    private void settle(AiRequestAdmission.Permit permit,String usage,String outcome) {
+        if(permit==null)return;
+        Long input=null,output=null;boolean known=false;
+        if(usage!=null)try {
+            var node=JsonUtils.readTree(usage);
+            known=node.path("known").asBoolean(false);
+            if(node.path("inputTokens").isIntegralNumber() && node.path("outputTokens").isIntegralNumber()) {
+                input=node.path("inputTokens").asLong();output=node.path("outputTokens").asLong();
+            }
+        } catch(RuntimeException ignored) { known=false; }
+        admission.finish(permit,input,output,known,outcome);
     }
 
     private void requireUsable(AgentHeaders headers) {
@@ -232,37 +310,26 @@ public class PythonAgentClient {
         } catch (Exception e) { throw new IllegalStateException("无法读取 AI 本机配置文件"); }
     }
 
-    private static HttpURLConnection open(URI uri, AgentHeaders headers, byte[] body, int readTimeoutMillis) {
-        try {
-            var connection = (HttpURLConnection) uri.toURL().openConnection(java.net.Proxy.NO_PROXY);
-            connection.setConnectTimeout(3000);
-            connection.setReadTimeout(readTimeoutMillis);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestMethod("POST");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("X-Agent-Secret", headers.secret());
-            if (!headers.modelApiKey().isEmpty()) connection.setRequestProperty("X-Model-Api-Key", headers.modelApiKey());
-            if (!headers.modelBaseUrl().isEmpty()) connection.setRequestProperty("X-Model-Base-Url", headers.modelBaseUrl());
-            if (!headers.modelName().isEmpty()) connection.setRequestProperty("X-Model-Name", headers.modelName());
-            if (!headers.toolToken().isEmpty()) connection.setRequestProperty("X-Tool-Token", headers.toolToken());
-            connection.setFixedLengthStreamingMode(body.length);
-            try (var out = connection.getOutputStream()) { out.write(body); }
-            return connection;
-        } catch (IOException e) {
-            throw new IllegalStateException("无法连接本机 AI 服务", e);
-        }
+    private static okhttp3.Call newCall(URI uri,AgentHeaders headers,byte[] body,int readTimeoutMillis) {
+        var request=new okhttp3.Request.Builder().url(uri.toString())
+                .post(okhttp3.RequestBody.create(new String(body,StandardCharsets.UTF_8),okhttp3.MediaType.get("application/json; charset=utf-8")))
+                .header("X-Agent-Secret",headers.secret()).header("X-AI-Usage","1");
+        String trace=org.slf4j.MDC.get("aiCallId");if(trace==null)trace=org.slf4j.MDC.get("requestId");
+        if(trace!=null)request.header("X-Request-ID",trace);
+        if(!headers.modelApiKey().isEmpty())request.header("X-Model-Api-Key",headers.modelApiKey());
+        if(!headers.modelBaseUrl().isEmpty())request.header("X-Model-Base-Url",headers.modelBaseUrl());
+        if(!headers.modelName().isEmpty())request.header("X-Model-Name",headers.modelName());
+        if(!headers.toolToken().isEmpty())request.header("X-Tool-Token",headers.toolToken());
+        return HTTP.newBuilder().readTimeout(readTimeoutMillis,java.util.concurrent.TimeUnit.MILLISECONDS).build().newCall(request.build());
     }
-
-    private static Response post(URI uri, AgentHeaders headers, byte[] body, int readTimeoutMillis) throws IOException {
-        var connection = open(uri, headers, body, readTimeoutMillis);
-        try {
-            int status = connection.getResponseCode();
-            String payload = read(status == 200 ? connection.getInputStream() : connection.getErrorStream(), 1000001);
-            if (payload == null) payload = "";
-            if (payload.length() > 1000000) throw new IOException("AI 服务响应过大");
-            return new Response(status, payload);
-        } finally { connection.disconnect(); }
+    private static Response post(URI uri,AgentHeaders headers,byte[] body,int readTimeoutMillis)throws IOException {
+        var call=newCall(uri,headers,body,readTimeoutMillis);var owner=Thread.currentThread();
+        var watchdog=STREAM_WATCHDOG.scheduleAtFixedRate(()->{if(owner.isInterrupted())call.cancel();},100,100,java.util.concurrent.TimeUnit.MILLISECONDS);
+        try(var response=call.execute()) {
+            String payload=read(response.body()==null?null:response.body().byteStream(),1000001);
+            if(payload.length()>1000000)throw new IOException("AI服务响应过大");
+            return new Response(response.code(),payload,response.header("X-AI-Usage"));
+        } finally {watchdog.cancel(false);call.cancel();}
     }
 
     /** 限量读取：不信任对端长度，超过上限立即截断，避免异常响应占满内存。 */

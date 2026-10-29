@@ -14,6 +14,7 @@ import cn.xinghuaerp.ai.service.PythonAgentClient;
 public class InventoryReviewWorkflowSync {
     private final AiInventoryReviewService tasks;
     private final PythonAgentClient python;
+    private String scanAfterId="";
 
     public Object sync(AiInventoryReviewService.Task task) {
         var input = new HashMap<String,Object>();
@@ -29,9 +30,20 @@ public class InventoryReviewWorkflowSync {
 
     @Scheduled(fixedDelayString = "${ERP_AGENT_REVIEW_SYNC_DELAY_MS:30000}")
     public void reconcile() {
-        for (var task : tasks.pendingWorkflowSync()) {
+        if (Thread.currentThread().isInterrupted()) return;
+        for (var task : tasks.pendingWorkflowSync(scanAfterId)) {
+            if (Thread.currentThread().isInterrupted()) return;
+            scanAfterId=task.id();
             try { sync(task); }
-            catch (RuntimeException error) { log.warn("审核工作流同步失败，任务 {} 将重试：{}", task.id(), error.getMessage()); }
+            catch (RuntimeException error) {
+                for (Throwable cause=error;cause!=null;cause=cause.getCause()) {
+                    if (cause instanceof InterruptedException || cause instanceof java.util.concurrent.CancellationException) {
+                        Thread.currentThread().interrupt();return;
+                    }
+                }
+                if(Thread.currentThread().isInterrupted())return;
+                log.warn("审核工作流同步失败，任务 {} 将重试，错误类型={}", task.id(), error.getClass().getSimpleName());
+            }
         }
     }
 }

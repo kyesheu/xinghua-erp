@@ -23,7 +23,7 @@ def plan_management(request: ManagementQuestion):
     settings = model_settings()
     if not settings["enabled"]:
         return {"status": "disabled", "topics": [], "days": None}
-    from langchain_openai import ChatOpenAI
+    from app.core.model_policy import build_chat_model as ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
     try:
         model = ChatOpenAI(model=settings["name"], api_key=settings["api_key"], base_url=settings["base_url"], timeout=20, max_retries=0)
@@ -192,7 +192,7 @@ def explain(state: State):
     settings = model_settings()
     if not settings["enabled"]:
         return {"modelStatus": "disabled", "explanation": None}
-    from langchain_openai import ChatOpenAI
+    from app.core.model_policy import build_chat_model as ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
     import json
     try:

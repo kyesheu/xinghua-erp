@@ -17,12 +17,18 @@ import java.util.List;
 public class MemberTools {
 
     private final ShopMemberService memberService;
+    public String getMemberList(String keyword, Integer limit) {
+        return getMemberList(keyword, limit, new cn.xinghuaerp.system.service.SalesScope(null, null));
+    }
     public String getMemberList(
             String keyword,
-            Integer limit) {
+            Integer limit, cn.xinghuaerp.system.service.SalesScope scope) {
         if (limit == null || limit <= 0) limit = 50;
 
         LambdaQueryWrapper<ShopMember> wrapper = new LambdaQueryWrapper<>();
+        java.util.Objects.requireNonNull(scope, "缺少数据范围");
+        wrapper.eq(scope.merchantId() != null, ShopMember::getMerchantId, scope.merchantId());
+        wrapper.eq(scope.shopId() != null, ShopMember::getShopId, scope.shopId());
         if (keyword != null && !keyword.isBlank()) {
             wrapper.and(w -> w.like(ShopMember::getName, keyword)
                     .or().like(ShopMember::getPhone, keyword)

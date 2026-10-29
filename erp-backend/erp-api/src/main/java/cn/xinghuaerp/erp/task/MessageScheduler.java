@@ -53,10 +53,14 @@ public class MessageScheduler {
     public void retryFailedNotify() {
         List<SysMessage> failed = messageService.getFailedNotify();
         for (SysMessage msg : failed) {
-            boolean allOk = notifierService.notifyAll(msg.getTitle(), msg.getContent());
-            msg.setNotifyStatus(allOk ? 1 : 2);
-            msg.setNotifyTime(LocalDateTime.now());
-            messageService.save(msg);
+            if(Thread.currentThread().isInterrupted())return;
+            try {
+                boolean allOk=notifierService.notifyAll(msg.getTitle(),msg.getContent());
+                msg.setNotifyStatus(allOk?1:2);msg.setNotifyTime(LocalDateTime.now());messageService.save(msg);
+            } catch(RuntimeException failure) {
+                if(Thread.currentThread().isInterrupted())return;
+                log.warn("消息补偿失败 id={} errorType={}",msg.getId(),failure.getClass().getSimpleName());
+            }
         }
         if (!failed.isEmpty()) log.info("重试推送 {} 条消息", failed.size());
     }

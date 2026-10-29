@@ -34,6 +34,11 @@ public class OrderFacadeImpl implements OrderFacade {
     @Override public int updateOOrderItem(OOrderItem entity, com.baomidou.mybatisplus.core.conditions.Wrapper<OOrderItem> wrapper) { return oOrderItemMapper.update(entity, wrapper); }
     @Override public int updateOOrderItem(OOrderItem entity) { return oOrderItemMapper.updateById(entity); }
     @Override public OOrder getOOrderOne(com.baomidou.mybatisplus.core.conditions.Wrapper<OOrder> wrapper) { return oOrderMapper.selectOne(wrapper); }
+    @Override public int clearOrderSettlement(Long orderId,Long settlementId) {
+        return oOrderMapper.update(null,new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<OOrder>()
+                .eq("id",orderId).eq("settlement_id",settlementId).set("settlement_status",0)
+                .set("settlement_id",null).set("settlement_time",null));
+    }
     @Override public int updateOOrder(OOrder entity) { return oOrderMapper.updateById(entity); }
     @Override public java.util.List<ShopOrderItem> listShopOrderItem(com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrderItem> wrapper) { return shopOrderItemMapper.selectList(wrapper); }
     @Override public int updateShopOrderItem(ShopOrderItem entity, com.baomidou.mybatisplus.core.conditions.Wrapper<ShopOrderItem> wrapper) { return shopOrderItemMapper.update(entity, wrapper); }

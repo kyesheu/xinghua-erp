@@ -111,8 +111,9 @@ public class AiSalesReadService {
         // 销售：PAID 订单 JOIN 明细，按内部 SKU 聚合（仅 goods_sku_id>0 且 quantity>0 的明细）。
         String salesFrom=f.sql().replace(" FROM o_order o WHERE"," FROM o_order o JOIN o_order_item i ON i.order_id=o.id WHERE")+PAID;
         var aggs=jdbc.query("SELECT i.goods_sku_id,MAX(i.goods_title),COUNT(DISTINCT o.id),SUM(i.quantity),COALESCE(SUM(CAST(i.payment AS DECIMAL(20,2))),0)"+salesFrom
-                        +" AND i.goods_sku_id>0 AND i.quantity>0 GROUP BY i.goods_sku_id",
+                        +" AND i.goods_sku_id>0 AND i.quantity>0 GROUP BY i.goods_sku_id LIMIT 20001",
                 (rs,n)->new Agg(rs.getString(1),rs.getString(2),rs.getLong(3),rs.getLong(4),rs.getBigDecimal(5),0L,BigDecimal.ZERO),f.args().toArray());
+        if(aggs.size()>20000) throw new IllegalArgumentException("SKU规模超过单次分析范围，请缩小商户或店铺范围");
         // 退款：复用财务侧规则——单号+商户+店铺唯一匹配原单，已完成类型1/10/11退款，申请时间早于窗口结束，按退款单登记 SKU 归集。
         String matches="(SELECT COUNT(*) FROM o_order x WHERE x.order_num=r.order_num AND x.merchant_id=r.merchant_id AND x.shop_id=r.shop_id)";
         String refundFrom=f.sql().replace(" FROM o_order o WHERE"," FROM o_refund r JOIN o_order o ON o.order_num=r.order_num AND o.merchant_id=r.merchant_id AND o.shop_id=r.shop_id WHERE")+PAID
@@ -121,8 +122,8 @@ public class AiSalesReadService {
         record RefundAgg(long orders, BigDecimal amount) {}
         var refundBySku=new java.util.HashMap<String,RefundAgg>();
         jdbc.query("SELECT r.goods_sku_id,COUNT(DISTINCT r.id),COALESCE(SUM(CASE WHEN r.refund_fee>=0 THEN CAST(r.refund_fee AS DECIMAL(20,2)) ELSE 0 END),0)"+refundFrom
-                        +" GROUP BY r.goods_sku_id",
-                rs-> { while(rs.next()) refundBySku.put(rs.getString(1),new RefundAgg(rs.getLong(2),rs.getBigDecimal(3))); return null; },
+                        +" GROUP BY r.goods_sku_id LIMIT 20001",
+                rs-> { while(rs.next()) { if(refundBySku.size()>=20000)throw new IllegalArgumentException("退款SKU规模超过单次分析范围，请缩小主体范围"); refundBySku.put(rs.getString(1),new RefundAgg(rs.getLong(2),rs.getBigDecimal(3))); } return null; },
                 refundArgs.toArray());
         long unlinked=jdbc.queryForObject("SELECT COALESCE(SUM(CASE WHEN r.goods_sku_id IS NULL OR r.goods_sku_id<=0 THEN 1 ELSE 0 END),0)"+refundFrom,
                 Long.class,refundArgs.toArray());

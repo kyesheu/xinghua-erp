@@ -213,6 +213,7 @@ interface StockOutRecord {
 }
 
 interface BatchForm {
+  outQuantity?: number
   entryItemId?: number | string
   entryId?: number | string
   goodsId?: number | string
@@ -297,6 +298,7 @@ async function handleItemStockOut(row: StockOutItem) {
     goodsId: row.goodsId,
     goodsName: row.goodsName,
     skuName: row.skuName,
+    outQuantity: row.outQuantity ?? 0,
     pendingQty: (row.originalQuantity ?? 0) - (row.outQuantity ?? 0),
   }
   batchList.value = []
@@ -322,15 +324,16 @@ async function submitBatchStockOut() {
     return
   }
   try {
-    await Promise.all(
-      selected.map((batch) =>
-        stockOut({
-          entryItemId: batchForm.value.entryItemId,
-          batchId: batch.id,
-          outQty: batch.selectedQty,
-        })
-      )
-    )
+    let observed = batchForm.value.outQuantity ?? 0
+    for (const batch of selected) {
+      await stockOut({
+        entryItemId: batchForm.value.entryItemId,
+        batchId: batch.id,
+        outQty: batch.selectedQty,
+        outQuantity: observed,
+      })
+      observed += batch.selectedQty ?? 0
+    }
     ElMessage.success('出库成功')
     batchOpen.value = false
     if (detailForm.value.id !== undefined) {

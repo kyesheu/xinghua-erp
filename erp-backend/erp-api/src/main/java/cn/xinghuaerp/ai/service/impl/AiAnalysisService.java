@@ -140,7 +140,7 @@ public class AiAnalysisService {
         sendEventSafe(emitter, emitterDone, "analysis_start", String.valueOf(record.getId()));
 
         String prompt = fullPrompt;
-        executor.submit(() -> {
+        executor.submit(emitter, () -> {
             StringBuilder fullResponse = new StringBuilder();
             AtomicBoolean modelRejected = new AtomicBoolean(false);
             try {
@@ -150,6 +150,7 @@ public class AiAnalysisService {
                 python.stream("/internal/analysis", body, toolToken.issue(userId), (type, content) -> {
                     switch (type) {
                         case "message" -> {
+                            if(fullResponse.length()+content.length()>32000)throw new IllegalStateException("AI输出超过限制");
                             fullResponse.append(content);
                             sendEventSafe(emitter, emitterDone, "message", content);
                         }
@@ -168,6 +169,7 @@ public class AiAnalysisService {
                     complete(record, fullResponse.toString(), emitter, emitterDone);
                 }
             } catch (Exception e) {
+                if(Thread.currentThread().isInterrupted()){record.setStatus(2);record.setAnalysisResult("分析已取消");try {analysisRecordService.save(record);} catch(RuntimeException ignored){} return;}
                 log.warn("AI 分析调用失败，返回本地数据摘要: {}", e.getMessage());
                 fail(record, "AI 服务不可用：" + e.getMessage(), emitter, emitterDone);
             }
@@ -186,7 +188,7 @@ public class AiAnalysisService {
 
     /** 失败路径：把本地数据摘要作为结果压入同一份记录，前端体验与成功一致。 */
     private void fail(AiAnalysisRecord record, String reason, SseEmitter emitter, AtomicBoolean done) {
-        String local = fallback.build(record.getAnalysisType());
+        String local = fallback.build(record.getAnalysisType(),record.getUserId());
         record.setAnalysisResult(local);
         record.setStatus(1);
         record.setErrorMessage(reason);

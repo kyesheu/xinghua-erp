@@ -7,6 +7,8 @@ Python 不直连数据库，也不保存用户会话——每次工具调用都�
 
 import json
 import os
+import logging
+from time import monotonic
 from contextvars import ContextVar
 from urllib import error, request
 
@@ -32,8 +34,17 @@ def backend_base_url() -> str:
     return (os.getenv("ERP_BACKEND_URL") or "http://127.0.0.1:6149").rstrip("/")
 
 
+class ToolQueryError(RuntimeError):
+    pass
+
+
+RESOURCES = {"shop.list", "warehouse.list", "goods.search", "goods.sku", "inventory.list", "order.list", "refund.list", "purchase.list", "logistics.waybill", "stock.in", "stock.out", "member.list", "supplier.list"}
+
+
 def query_backend(resource: str, params: dict) -> str:
     """调用 Java 工具网关取一段已格式化的业务数据；失败时抛可读异常。"""
+    if resource not in RESOURCES:
+        raise ToolQueryError("不支持的ERP资料类型")
     body = json.dumps({"resource": resource, "params": params}, ensure_ascii=False).encode("utf-8")
     call = request.Request(backend_base_url() + "/internal/ai-tools/query", data=body, method="POST")
     call.add_header("Content-Type", "application/json")
@@ -41,16 +52,27 @@ def query_backend(resource: str, params: dict) -> str:
     token = _TOOL_TOKEN.get()
     if token:
         call.add_header("X-Tool-Token", token)
+    from app.core.model_policy import current_policy
+    policy = current_policy()
+    if policy:
+        policy.begin_tool()
+        call.add_header("X-Request-ID", policy.request_id)
+    started = monotonic()
     try:
         with request.urlopen(call, timeout=_TOOL_TIMEOUT_SECONDS) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            raw = response.read(131073)
+            if len(raw) > 131072:
+                raise ToolQueryError("ERP 工具返回过大，请缩小查询范围")
+            payload = json.loads(raw.decode("utf-8"))
     except error.HTTPError as exc:
-        raise RuntimeError(f"ERP 数据查询被拒绝（HTTP {exc.code}）") from exc
+        raise ToolQueryError(f"ERP 数据查询被拒绝（HTTP {exc.code}）") from exc
     except (error.URLError, TimeoutError, OSError) as exc:
-        raise RuntimeError("无法连接 ERP 服务，业务数据暂时不可用") from exc
+        raise ToolQueryError("无法连接 ERP 服务，业务数据暂时不可用") from exc
+    finally:
+        logging.getLogger(__name__).info("ERP tool requestId=%s resource=%s elapsedMs=%d", policy.request_id if policy else "offline", resource, (monotonic()-started)*1000)
     text = payload.get("text") if isinstance(payload, dict) else None
     if not isinstance(text, str):
-        raise RuntimeError("ERP 数据查询返回格式异常")
+        raise ToolQueryError("ERP 数据查询返回格式异常")
     return text
 
 

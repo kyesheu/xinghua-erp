@@ -57,7 +57,7 @@ def draft_product(facts: ProductFacts):
             raise ValueError("禁用词不能为空")
     except (ValidationError, ValueError, TypeError):
         return {"modelStatus": "rules_invalid", "draft": None}
-    from langchain_openai import ChatOpenAI
+    from app.core.model_policy import build_chat_model as ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
     try:
         model = ChatOpenAI(model=settings["name"], api_key=settings["api_key"], base_url=settings["base_url"], timeout=20, max_retries=0)

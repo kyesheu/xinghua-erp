@@ -9,7 +9,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
-public class FeishuNotifier {
+public class FeishuNotifier implements ChannelNotifier {
 
     public boolean notify(String webhook, String title, String content) {
         try {
@@ -19,11 +19,13 @@ public class FeishuNotifier {
 
             String result = OkHttpClientHelper.post(webhook, body.toString());
             boolean ok = result != null && (result.contains("\"code\":0") || result.contains("\"StatusCode\":0"));
-            if (!ok) log.warn("飞书推送返回异常: {}", result);
+            if (!ok) log.warn("通知渠道返回失败，详情请在服务商控制台核对");
             return ok;
         } catch (Exception e) {
-            log.error("飞书推送失败", e);
+            log.warn("飞书推送失败" + " errorType={}", e.getClass().getSimpleName());
             return false;
         }
     }
+    @Override public String type() { return "FEISHU"; }
+    @Override public boolean send(cn.xinghuaerp.system.entity.SysAlertChannel channel,String title,String content) {return notify(channel.getWebhookUrl(), title, content);}
 }

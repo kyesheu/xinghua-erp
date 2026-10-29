@@ -19,6 +19,7 @@ public class WarehouseTools {
     public String getWarehouseList() {
         LambdaQueryWrapper<ErpWarehouse> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(ErpWarehouse::getStatus, "ENABLE");
+        wrapper.orderByAsc(ErpWarehouse::getId).last("LIMIT 100");
         List<ErpWarehouse> list = warehouseService.list(wrapper);
 
         if (list.isEmpty()) {

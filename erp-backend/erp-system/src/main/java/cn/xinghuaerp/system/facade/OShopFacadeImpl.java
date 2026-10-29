@@ -17,4 +17,5 @@ public class OShopFacadeImpl implements OShopFacade {
     @Override public OShop getById(java.io.Serializable id) { return delegate.getById(id); }
     @Override public java.util.List<OShop> list() { return delegate.list(); }
     @Override public java.util.List<OShop> list(com.baomidou.mybatisplus.core.conditions.Wrapper<OShop> query) { return delegate.list(query); }
+    @Override public long count() { return delegate.count(); }
 }

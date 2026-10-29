@@ -22,11 +22,11 @@ export function sendChatMessage(sessionId: string, message: string): Promise<Res
   })
 }
 
-export function getChatHistory(sessionId: string) {
+export function getChatHistory(sessionId: string, cursor?: { beforeTimestamp: number; beforeId: number }, limit = 50) {
   return request({
     url: 'api/ai/chat/history',
     method: 'get',
-    params: { sessionId }
+    params: { sessionId, ...cursor, limit }
   })
 }
 

@@ -29,11 +29,11 @@ class OrderOutboxDispatcherTest {
         }).when(rabbit).convertAndSend(anyString(),anyString(),any(Object.class),any(MessagePostProcessor.class),any(CorrelationData.class));
         new OrderOutboxDispatcher(jdbc,rabbit,tm).dispatch();
         if (ack && !returned) {
-            verify(jdbc).update(contains("SET sent_at="),eq("event-1"));
-            verify(jdbc,never()).update(contains("attempts=attempts+1"),any(Object.class));
+            verify(jdbc).update(contains("SET sent_at="),eq("event-1"),anyString());
+            verify(jdbc,never()).update(contains("attempts=attempts+1"),any(Object.class),any(Object.class),anyString());
         } else {
-            verify(jdbc,never()).update(contains("SET sent_at="),any(Object.class));
-            verify(jdbc).update(contains("attempts=attempts+1"),eq("event-1"));
+            verify(jdbc,never()).update(contains("SET sent_at="),any(Object.class),anyString());
+            verify(jdbc).update(contains("attempts=attempts+1"),any(Object.class),eq("event-1"),anyString());
         }
         verify(tm,atLeastOnce()).commit(any());
     }
@@ -52,8 +52,8 @@ class OrderOutboxDispatcherTest {
             new OrderOutboxDispatcher(jdbc,rabbit,tm).dispatch();
             org.junit.jupiter.api.Assertions.assertTrue(Thread.currentThread().isInterrupted());
             verify(jdbc,times(1)).queryForList(anyString());
-            verify(jdbc).update(contains("attempts=attempts+1"),eq("interrupted"));
-            verify(jdbc,never()).update(contains("SET sent_at="),any(Object.class));
+            verify(jdbc).update(contains("attempts=attempts+1"),any(Object.class),eq("interrupted"),anyString());
+            verify(jdbc,never()).update(contains("SET sent_at="),any(Object.class),anyString());
             verify(tm).commit(any());
         } finally { Thread.interrupted(); }
     }

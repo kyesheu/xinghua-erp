@@ -1,19 +1,12 @@
-小红书、快手平台的 appkey 在「[系统&接口配置 - 电商平台设置](/setting/platform)」统一维护，获取后填入即可对接平台 API。
+# 配置平台应用
 
-## 小红书
+在「系统&接口配置 → 电商平台设置」维护页面支持的平台参数。应用凭据与店铺授权是两类资料，需按对应平台及店铺的实际接入方式配置。
 
-申请入口：<a href="https://open.xiaohongshu.com" target="_blank">open.xiaohongshu.com</a>
+1. 准备平台已授予权限的应用资料。
+2. 在相应平台项填写并保存配置。
+3. 添加店铺并完成页面支持的授权操作。
+4. 查看授权状态及接口返回结果，再使用同步功能。
 
-1. 进入小红书开放平台，注册开发者并创建应用
-2. 获取 AppKey 与 AppSecret
-3. 在「[电商平台设置](/setting/platform) - 小红书」填入并保存
-
-## 快手
-
-申请入口：<a href="https://open.kuaishou.com" target="_blank">open.kuaishou.com</a>
-
-1. 进入快手开放平台，创建应用
-2. 获取 AppKey 与 AppSecret
-3. 在「[电商平台设置](/setting/platform) - 快手」填入并保存
+请勿把 AppSecret、Token 等凭据粘贴到消息、说明文档或截图中。
 
 ![平台配置页（小红书/快手）](/help/guide-appkey.png)

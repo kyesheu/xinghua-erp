@@ -39,7 +39,8 @@ public class SysMessageServiceImpl implements ISysMessageService {
     public List<SysMessage> getUnread() {
         LambdaQueryWrapper<SysMessage> w = new LambdaQueryWrapper<>();
         w.eq(SysMessage::getIsRead, 0);
-        w.orderByDesc(SysMessage::getCreatedTime);
+        w.orderByDesc(SysMessage::getCreatedTime, SysMessage::getId);
+        w.last("LIMIT 100");
         return mapper.selectList(w);
     }
 
@@ -74,8 +75,10 @@ public class SysMessageServiceImpl implements ISysMessageService {
     public List<SysMessage> getFailedNotify() {
         LambdaQueryWrapper<SysMessage> w = new LambdaQueryWrapper<>();
         w.eq(SysMessage::getNeedNotify, 1);
-        w.eq(SysMessage::getNotifyStatus, 2);
-        w.lt(SysMessage::getNotifyTime, LocalDateTime.now().minusMinutes(10));
+        var cutoff=LocalDateTime.now().minusMinutes(10);
+        w.in(SysMessage::getNotifyStatus, 0, 2);
+        w.and(query->query.lt(SysMessage::getNotifyTime,cutoff)
+                .or(pending->pending.isNull(SysMessage::getNotifyTime).lt(SysMessage::getCreatedTime,cutoff)));
         w.orderByAsc(SysMessage::getNotifyTime);
         w.last("LIMIT 20");
         return mapper.selectList(w);

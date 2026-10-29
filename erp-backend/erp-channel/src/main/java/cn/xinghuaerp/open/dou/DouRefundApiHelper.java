@@ -34,7 +34,8 @@ public class DouRefundApiHelper {
         if (JsonUtils.integer(resultObj, "code") == 10000) {
             Integer total = JsonUtils.integer(JsonUtils.node(resultObj, "data"), "total");
 
-            if (total == 0) return ApiResultVo.error(ApiResultVoEnum.ApiException.getIndex(), "无订单可以更新");
+            if(total==null || total<0)return ApiResultVo.error("售后总数无效，无法确认分页完整性");
+            if(total==0)return ApiResultVo.success(0,java.util.List.of());
 
             List<AfterSale> list = JsonUtils.readList(JsonUtils.text(JsonUtils.node(resultObj, "data"), "items"), AfterSale.class);
             return ApiResultVo.success(total, list);
@@ -55,7 +56,8 @@ public class DouRefundApiHelper {
         if (JsonUtils.integer(resultObj, "code") == 10000) {
             Integer total = JsonUtils.integer(JsonUtils.node(resultObj, "data"), "total");
 
-            if (total == 0) return ApiResultVo.error(ApiResultVoEnum.ApiException.getIndex(), "无订单可以更新");
+            if(total==null || total<0)return ApiResultVo.error("售后总数无效，无法确认分页完整性");
+            if(total==0)return ApiResultVo.success(0,java.util.List.of());
 
             List<AfterSale> list = JsonUtils.readList(JsonUtils.text(JsonUtils.node(resultObj, "data"), "items"), AfterSale.class);
             return ApiResultVo.success(total, list);

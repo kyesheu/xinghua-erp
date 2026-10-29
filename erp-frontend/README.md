@@ -1,46 +1,37 @@
-# erp-frontend
+# ERP 管理前端
 
-电商 ERP 的前端工程：Vue 3 + TypeScript + Vite + Element Plus，与 `erp-backend`（端口 6149）、`ai-service`（端口 8000）配合使用。
+前端提供商品、订单、采购、库存、财务、系统管理和 AI 页面。采用 Vue 3、TypeScript、Vite 8 与 Element Plus，业务 API 由 Java 后端提供。
 
-## 运行
+## 启动与访问
 
-```bash
+准备 Node.js 22.12 或以上，并先按[部署指南](../docs/部署指南.md)启动后端。在本目录执行：
+
+```powershell
 npm install
-npm run dev       # 开发服务，http://localhost:88
-npm run build     # 类型检查 + 生产构建，输出 dist/
-npm run preview   # 预览构建产物
+npm run dev
 ```
 
-需要 Node.js 18+。
+默认访问 http://localhost:88，Java 后端默认地址为 http://localhost:6149。
 
-## 环境变量
+## 地址配置
 
-按 `mode` 读取对应文件，均以 `VITE_` 开头：
+| 配置文件 | 使用场景 |
+| --- | --- |
+| `.env.development` | 本机页面开发服务 |
+| `.env.staging` | staging 模式 |
+| `.env.production` | 生产构建 |
 
-| 文件 | 用途 | 关键变量 |
-| --- | --- | --- |
-| `.env.development` | 本地开发 | `VITE_APP_BASE_API=http://localhost:6149` |
-| `.env.staging` | 预发 | `VITE_APP_BASE_API=/stage-api`（配合 nginx 反代） |
-| `.env.production` | 生产构建 | `VITE_APP_BASE_API=/prod-api`（配合 nginx 反代） |
+`VITE_APP_BASE_API` 指定 API 地址，`VITE_APP_SSE_URL` 指定流式消息地址。静态部署时须与 nginx 反向代理路径一致；修改后重新启动开发服务或重新构建。
 
-`VITE_APP_SSE_URL` 是 SSE 推送地址（消息通知、AI 对话流式输出），开发环境与后端同址；部署到 nginx 时改为反代路径。开发服务器监听 88 端口，`/api` 请求按 `VITE_APP_BASE_API` 代理到后端。
-
-## 目录结构
-
-```
-src/
-├── api/            # 接口封装，按业务域分目录（goods/order/inventory/ai/system…）
-├── views/          # 页面，按业务域分目录
-├── store/modules/  # Pinia 状态；permission.ts 负责动态路由（后端菜单 → 视图组件）
-├── router/         # 路由定义与守卫
-├── utils/          # request.ts（axios 封装、令牌与错误处理）、通用工具
-├── components/     # 通用组件
-└── assets/         # 样式、图标、图片
-public/help/        # 页面内帮助文档（Markdown）
+```powershell
+npm run build
+npm run preview
 ```
 
-## 约定
+构建产物位于 `dist/`。`preview` 用于本机预览，正式部署由静态服务器提供页面，并为 API 与 SSE 配置代理。
 
-- 菜单与路由由后端返回，`store/modules/permission.ts` 把菜单的组件路径映射到 `views/` 下的文件；新增页面需同步在后端菜单中登记。
-- 接口统一走 `utils/request.ts`，令牌、错误提示与登录失效跳转都在这一层处理，页面里不要直接用 axios。
-- 类型检查命令为 `npx vue-tsc --noEmit -p tsconfig.app.json`，必须带 `-p`（根 `tsconfig.json` 是 solution 型，直接跑不会真正检查代码）。
+## 页面与权限
+
+菜单由后端返回，页面可见性取决于账号角色权限。业务数据还受商户、店铺、仓库等主体归属限制；隐藏菜单不代替服务端权限校验。首次操作顺序见[业务流程](../docs/采购销售库存业务流程.md)。
+
+页面帮助位于 `public/help/`，内容面向操作人员；`src/views/` 为业务页面，`src/api/` 为接口封装，`src/utils/request.ts` 统一处理认证、请求和错误提示。

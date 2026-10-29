@@ -324,7 +324,7 @@ class SupplierDispatchFlowTest {
         assertEquals(100,value("SELECT quantity FROM o_goods_inventory"));
         assertEquals(0,stocking.generateStockOutByOrder(generate).getCode());
         assertEquals(100,value("SELECT quantity FROM o_goods_inventory"));
-        var request=new StockOutItemRequest(); request.setEntryItemId(db.queryForObject("SELECT id FROM erp_stock_out_item",Long.class)); request.setOutQty(4);
+        var request=new StockOutItemRequest(); request.setEntryItemId(db.queryForObject("SELECT id FROM erp_stock_out_item",Long.class)); request.setOutQty(4); request.setOutQuantity(0);
         assertEquals(0,outbound.stockOut(1L,"tester",request).getCode());
         assertEquals(96,value("SELECT quantity FROM o_goods_inventory")); assertEquals(96,value("SELECT current_qty FROM o_goods_inventory_batch"));
         assertNotEquals(0,outbound.stockOut(1L,"tester",request).getCode());
@@ -334,7 +334,7 @@ class SupplierDispatchFlowTest {
         long vendor=service.allocateItems(quantityRequest(1,6),"tester").get(0);
         confirmTask(vendor,"VENDOR"); confirmLocal(local);
         var generate=new ShipStockUpCompleteBo(); generate.setStockingId(local); assertEquals(0,stocking.generateStockOutByOrder(generate).getCode());
-        var out=new StockOutItemRequest(); out.setEntryItemId(db.queryForObject("SELECT id FROM erp_stock_out_item",Long.class)); out.setOutQty(4);
+        var out=new StockOutItemRequest(); out.setEntryItemId(db.queryForObject("SELECT id FROM erp_stock_out_item",Long.class)); out.setOutQty(4); out.setOutQuantity(0);
         assertEquals(0,outbound.stockOut(1L,"tester",out).getCode()); assertEquals(96,value("SELECT quantity FROM o_goods_inventory"));
         var scope=new SalesScope(null,null); var create=new LocalAfterSaleRequest();
         create.setShopId(10L); create.setOrderItemId(1L); create.setType(10); create.setQuantity(4); create.setRefundAmount(new BigDecimal("40")); create.setReason("退货");

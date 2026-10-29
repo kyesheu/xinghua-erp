@@ -107,4 +107,16 @@ class PurchaseAuditTest {
         if (Number.class.isAssignableFrom(type)) return "bigint";
         return "varchar(255)";
     }
+    @Test void cancellationReportsLostStateRaceInsteadOfPretendingSuccess() {
+        var mapper=org.mockito.Mockito.mock(ErpPurchaseOrderMapper.class);
+        var row=new ErpPurchaseOrder();row.setId(1L);row.setStatus(1);
+        org.mockito.Mockito.when(mapper.selectById(1L)).thenReturn(row);
+        var concurrent=new ErpPurchaseOrderServiceImpl(mapper,null,null,null,null,null);
+        var command=request("operator");command.setOptionType("cancel");
+        assertEquals(0,concurrent.updateScmPurchaseOrder(command));
+        org.mockito.ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper<ErpPurchaseOrder>> filter=org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        org.mockito.Mockito.verify(mapper).update(org.mockito.ArgumentMatchers.any(ErpPurchaseOrder.class),filter.capture());
+        assertTrue(filter.getValue().getSqlSegment().contains("status"));
+        org.mockito.Mockito.verify(mapper,org.mockito.Mockito.never()).updateById(org.mockito.ArgumentMatchers.any(ErpPurchaseOrder.class));
+    }
 }

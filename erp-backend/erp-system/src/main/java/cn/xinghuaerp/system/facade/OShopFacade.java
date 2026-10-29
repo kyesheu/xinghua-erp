@@ -14,5 +14,6 @@ public interface OShopFacade {
     void updateSessionKey(ShopTokenBo tokenBo);
     OShop getById(java.io.Serializable id);
     java.util.List<OShop> list();
+    long count();
     java.util.List<OShop> list(com.baomidou.mybatisplus.core.conditions.Wrapper<OShop> query);
 }

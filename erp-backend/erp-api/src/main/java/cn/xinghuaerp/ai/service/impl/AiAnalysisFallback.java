@@ -24,7 +24,21 @@ public class AiAnalysisFallback {
     private final InventoryTools inventoryTools;
     private final RefundTools refundTools;
 
-    public String build(String analysisType) {
+    private final cn.xinghuaerp.system.service.BusinessAccessService access;
+
+    private final cn.xinghuaerp.system.service.AiAgentPermissionService permissions;
+
+    public String build(String analysisType,Long userId) {
+        boolean salesAllowed, inventoryAllowed, riskAllowed;
+        try {
+            access.requireHeadquarters(userId);
+            salesAllowed=permissions.allows(userId,"ai:sales:query");
+            inventoryAllowed=permissions.allows(userId,"ai:inventory:query");
+            riskAllowed=permissions.allows(userId,"ai:risk:query");
+        }
+        catch(RuntimeException denied) {
+            return "AI 分析服务暂时不可用。当前账号未生成跨主体本地摘要，请到有权限的业务页面查询；未查询的数据不代表零。";
+        }
         StringBuilder md = new StringBuilder();
         md.append("## 本地数据摘要\n\n");
         md.append("> AI 分析服务当前不可用，以下为系统按固定口径直接汇总的数据，不包含模型生成的结论与建议。")
@@ -32,18 +46,18 @@ public class AiAnalysisFallback {
 
         md.append("### 今日概况\n\n");
         md.append("| 指标 | 数值 |\n| --- | --- |\n");
-        SalesDailyVo today = safe(() -> orderService.getTodaySalesDaily(0L));
-        md.append("| 今日销售额 | ").append(today != null && today.getAmount() != null ? today.getAmount() : 0).append(" 元 |\n");
-        md.append("| 今日订单数 | ").append(today != null && today.getCount() != null ? today.getCount() : 0).append(" 单 |\n");
-        Integer waitShip = safe(() -> orderService.getWaitShipOrderAllCount(0L));
-        md.append("| 待发货订单 | ").append(waitShip == null ? 0 : waitShip).append(" 单 |\n\n");
+        SalesDailyVo today = salesAllowed ? safe(() -> orderService.getTodaySalesDaily(0L)) : null;
+        md.append("| 今日销售额 | ").append(today != null && today.getAmount() != null ? today.getAmount() : "不可用").append(" 元 |\n");
+        md.append("| 今日订单数 | ").append(today != null && today.getCount() != null ? today.getCount() : "不可用").append(" 单 |\n");
+        Integer waitShip = salesAllowed ? safe(() -> orderService.getWaitShipOrderAllCount(0L)) : null;
+        md.append("| 待发货订单 | ").append(waitShip == null ? "不可用" : waitShip).append(" 单 |\n\n");
 
         switch (analysisType == null ? "" : analysisType) {
-            case "inventory" -> appendInventory(md);
-            case "customer" -> appendRefund(md);
+            case "inventory" -> { if(inventoryAllowed) appendInventory(md); else md.append("当前无库存资料权限。\n"); }
+            case "customer" -> { if(riskAllowed) appendRefund(md); else md.append("当前无售后资料权限。\n"); }
             case "operation" -> appendOperation(md, waitShip);
             case "purchase" -> appendPurchase(md);
-            default -> appendSales(md);
+            default -> { if(salesAllowed) appendSales(md); else md.append("当前无销售资料权限。\n"); }
         }
 
         md.append("\n---\n\n启动 AI 服务后重新发起分析，可获得趋势解读、异常识别与运营建议。\n");
@@ -53,7 +67,8 @@ public class AiAnalysisFallback {
     private void appendSales(StringBuilder md) {
         md.append("### 近 7 日销售\n\n");
         List<SalesDailyVo> days = safe(orderService::salesDaily);
-        if (days == null || days.isEmpty()) {
+        if (days == null) {md.append("销售资料暂时不可用，不代表没有销售。\n");return;}
+        if (days.isEmpty()) {
             md.append("暂无销售记录。\n");
             return;
         }
@@ -62,8 +77,8 @@ public class AiAnalysisFallback {
         for (int i = 0; i < limit; i++) {
             SalesDailyVo day = days.get(i);
             md.append("| ").append(day.getDate() == null ? "-" : day.getDate())
-                    .append(" | ").append(day.getAmount() == null ? 0 : day.getAmount())
-                    .append(" | ").append(day.getCount() == null ? 0 : day.getCount()).append(" |\n");
+                    .append(" | ").append(day.getAmount() == null ? "不可用" : day.getAmount())
+                    .append(" | ").append(day.getCount() == null ? "不可用" : day.getCount()).append(" |\n");
         }
     }
 
@@ -89,7 +104,8 @@ public class AiAnalysisFallback {
 
     private void appendOperation(StringBuilder md, Integer waitShip) {
         md.append("### 发货积压\n\n");
-        int count = waitShip == null ? 0 : waitShip;
+        if(waitShip==null){md.append("待发货资料暂时不可用，不代表没有待发货订单。\n");return;}
+        int count = waitShip;
         md.append(count > 0
                 ? "当前有 " + count + " 单待发货，建议优先处理超时订单。\n"
                 : "当前没有待发货订单。\n");

@@ -102,6 +102,7 @@ public class AiInventoryReadService {
         long offset = ((long) page - 1) * size;
         long total = product ? mapper.countProductOverview(dataScope.merchantId(), dataScope.shopId(), warehouseId, keyword) : mapper.countOverview(dataScope.merchantId(), dataScope.shopId(), warehouseId);
         var records = all ? mapper.allOverview(dataScope.merchantId(),dataScope.shopId(),warehouseId) : product ? mapper.productOverview(dataScope.merchantId(), dataScope.shopId(), warehouseId, offset, size, keyword) : mapper.overview(dataScope.merchantId(), dataScope.shopId(), warehouseId, offset, size);
+        if (all && records.size() > 20000) throw new IllegalArgumentException("库存风险统计超过20000个SKU，请缩小业务范围");
         if (includeSales && warehouseId == null && !records.isEmpty()) {
             var ids = records.stream().map(row -> Long.valueOf(row.getSkuId())).toList();
             var end = LocalDate.now().atStartOfDay();

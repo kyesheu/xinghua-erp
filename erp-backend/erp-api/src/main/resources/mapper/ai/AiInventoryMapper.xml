@@ -13,10 +13,10 @@
             AND ((s.merchant_id=#{merchantId} AND s.shop_id=#{shopId}) OR EXISTS (SELECT 1 FROM o_goods_inventory v WHERE v.sku_id=s.id AND COALESCE(v.is_delete,0)=0 AND v.merchant_id=#{merchantId} AND v.shop_id=#{shopId}))
         </if>
     </sql>
-    <select id="countOverview" resultType="long">
+    <select timeout="10" id="countOverview" resultType="long">
         SELECT COUNT(*) FROM o_goods_sku s WHERE s.id &gt; 0 <include refid="overviewScope"/>
     </select>
-    <select id="batchAudit" resultType="cn.xinghuaerp.ai.vo.AiInventoryBatchAudit">
+    <select timeout="10" id="batchAudit" resultType="cn.xinghuaerp.ai.vo.AiInventoryBatchAudit">
         SELECT i.id AS inventoryId, COUNT(b.id) AS batchCount, COALESCE(SUM(b.current_qty),0) AS batchQuantity,
                COALESCE(SUM(CASE WHEN b.id IS NOT NULL AND
                    (b.current_qty IS NULL OR b.current_qty &lt; 0 OR b.sku_id IS NULL OR b.sku_id != i.sku_id
@@ -73,10 +73,11 @@
         WHERE s.id &gt; 0 <include refid="overviewScope"/>
         GROUP BY s.id,s.sku_code,s.goods_name,s.sku_name,s.status,s.low_qty
     </sql>
-    <select id="allOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+    <select timeout="10" id="allOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
         <include refid="overviewRows"/>
+        LIMIT 20001
     </select>
-    <select id="overview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+    <select timeout="10" id="overview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
         <include refid="overviewRows"/>
         ORDER BY CASE
           WHEN COUNT(i.id)=0 OR SUM(CASE WHEN i.stock_status=1 THEN 1 ELSE 0 END)=0 THEN 2
@@ -92,10 +93,10 @@
     <sql id="productFilter">
         <if test="keyword != null and keyword != ''">AND (s.goods_name LIKE CONCAT('%',#{keyword},'%') ESCAPE '!' OR s.sku_code LIKE CONCAT('%',#{keyword},'%') ESCAPE '!' OR s.sku_name LIKE CONCAT('%',#{keyword},'%') ESCAPE '!')</if>
     </sql>
-    <select id="countProductOverview" resultType="long">
+    <select timeout="10" id="countProductOverview" resultType="long">
         SELECT COUNT(*) FROM o_goods_sku s WHERE s.id &gt; 0 <include refid="overviewScope"/> <include refid="productFilter"/>
     </select>
-    <select id="productOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+    <select timeout="10" id="productOverview" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
         SELECT s.id AS skuId, s.sku_code AS skuCode, s.goods_name AS goodsName, s.sku_name AS skuName,
                s.status AS productStatus, s.low_qty AS lowQty,
                COUNT(i.id) AS inventoryRows,
@@ -127,7 +128,7 @@
           WHEN COALESCE(s.low_qty,0)&lt;=0 THEN 4 ELSE 5 END, s.id
         LIMIT #{limit} OFFSET #{offset}
     </select>
-    <select id="find" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
+    <select timeout="10" id="find" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
         SELECT id, goods_id, goods_num, sku_id, sku_code, goods_name, sku_name,
                quantity, locked_quantity, available_quantity, warehouse_id, merchant_id,
                shop_id, stock_status, update_time
@@ -139,7 +140,7 @@
         ORDER BY warehouse_id, merchant_id, shop_id, id
         LIMIT 200
     </select>
-    <select id="emptyScopes" resultType="cn.xinghuaerp.ai.vo.AiInventoryEmptyScope">
+    <select timeout="10" id="emptyScopes" resultType="cn.xinghuaerp.ai.vo.AiInventoryEmptyScope">
         SELECT sku_id AS skuId, warehouse_id AS warehouseId, merchant_id AS merchantId,
                shop_id AS shopId, SUM(available_quantity) AS availableQuantity
         FROM o_goods_inventory
@@ -152,7 +153,7 @@
         HAVING SUM(available_quantity)&lt;=0
         ORDER BY sku_id,warehouse_id,merchant_id,shop_id LIMIT 1001
     </select>
-    <select id="overviewPurchases" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+    <select timeout="10" id="overviewPurchases" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
         SELECT i.spec_id AS skuId, COUNT(DISTINCT p.id) AS openPurchaseOrders
         FROM erp_purchase_order p JOIN erp_purchase_order_item i ON i.order_id=p.id
         WHERE i.spec_id IN
@@ -164,7 +165,7 @@
           <if test="shopId != null">AND p.shop_id=#{shopId}</if>
         GROUP BY i.spec_id
     </select>
-    <select id="overviewSales" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
+    <select timeout="10" id="overviewSales" resultType="cn.xinghuaerp.ai.vo.AiInventoryOverviewRow">
         SELECT i.goods_sku_id AS skuId, SUM(i.quantity) AS sales30Days
         FROM o_order_item i JOIN o_order o ON o.id = i.order_id
         WHERE i.goods_sku_id IN
@@ -175,7 +176,7 @@
           <if test="shopId != null">AND o.shop_id = #{shopId}</if>
         GROUP BY i.goods_sku_id
     </select>
-    <select id="salesQuantity" resultType="long">
+    <select timeout="10" id="salesQuantity" resultType="long">
         SELECT COALESCE(SUM(i.quantity), 0)
         FROM o_order_item i JOIN o_order o ON o.id = i.order_id
         WHERE i.goods_sku_id = #{skuId}
@@ -184,7 +185,7 @@
           <if test="merchantId != null">AND o.merchant_id = #{merchantId}</if>
           <if test="shopId != null">AND o.shop_id = #{shopId}</if>
     </select>
-    <select id="purchaseInbound" resultType="map">
+    <select timeout="10" id="purchaseInbound" resultType="map">
         SELECT i.id AS itemId, i.stock_in_id AS stockInId, i.source_no AS sourceNo,
                i.source_item_id AS sourceItemId, i.sku_id AS skuId, i.warehouse_id AS warehouseId,
                i.merchant_id AS merchantId, i.shop_id AS shopId, i.quantity AS quantity,
@@ -199,7 +200,7 @@
           <if test="shopId != null">AND h.shop_id = #{shopId}</if>
         ORDER BY i.id DESC LIMIT 200
     </select>
-    <select id="purchaseWithoutTask" resultType="map">
+    <select timeout="10" id="purchaseWithoutTask" resultType="map">
         SELECT p.id AS orderId, p.order_num AS orderNum, p.status AS orderStatus,
                i.id AS itemId, i.quantity AS quantity, p.warehouse_id AS warehouseId
         FROM erp_purchase_order p JOIN erp_purchase_order_item i ON i.order_id = p.id
@@ -215,7 +216,7 @@
           <if test="shopId != null">AND p.shop_id = #{shopId}</if>
         ORDER BY p.id DESC, i.id DESC LIMIT 200
     </select>
-    <select id="purchaseShipments" resultType="cn.xinghuaerp.ai.vo.AiPurchaseShipment">
+    <select timeout="10" id="purchaseShipments" resultType="cn.xinghuaerp.ai.vo.AiPurchaseShipment">
         SELECT s.id,s.order_id,p.order_num,s.warehouse_id,s.ship_company,s.ship_num,s.ship_time,s.receipt_time,s.status
         FROM erp_purchase_order_ship s JOIN erp_purchase_order p ON p.id=s.order_id
           AND p.merchant_id=s.merchant_id AND p.shop_id=s.shop_id AND p.supplier_id=s.supplier_id
@@ -228,7 +229,7 @@
           <if test="shopId != null">AND p.shop_id=#{shopId}</if>
         ORDER BY s.id DESC LIMIT 200
     </select>
-    <select id="purchaseLedger" resultType="cn.xinghuaerp.ai.vo.AiPurchaseLedgerRow">
+    <select timeout="10" id="purchaseLedger" resultType="cn.xinghuaerp.ai.vo.AiPurchaseLedgerRow">
         SELECT p.id AS order_id,p.order_num,p.status AS order_status,p.warehouse_id,p.merchant_id,p.shop_id,
                i.id AS item_id,i.quantity AS ordered_quantity,
                COUNT(s.id) AS task_count,COALESCE(SUM(s.quantity),0) AS task_quantity,
@@ -257,7 +258,7 @@
         GROUP BY p.id,p.order_num,p.status,p.warehouse_id,p.merchant_id,p.shop_id,i.id,i.quantity
         ORDER BY p.id DESC,i.id DESC LIMIT 200
     </select>
-    <select id="search" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
+    <select timeout="10" id="search" resultType="cn.xinghuaerp.inventory.entity.OGoodsInventory">
         SELECT DISTINCT sku_id, sku_code, goods_name, sku_name
         FROM o_goods_inventory
         WHERE COALESCE(is_delete, 0) = 0 AND sku_id &gt; 0

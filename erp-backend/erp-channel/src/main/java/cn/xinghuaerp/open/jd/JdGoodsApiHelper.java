@@ -116,12 +116,17 @@ public class JdGoodsApiHelper {
 //                    }
 //                    String s = JsonNode.toJSONString(skuList.get(49));
                 skusList.addAll(JsonUtils.list(JsonUtils.node(JsonUtils.node(jsonObject, "jingdong_sku_read_searchSkuList_responce"), "page"), "data", JdGoodsSkuListResponse.class));
+                if(totalPage>500)return ApiResultVo.error(ApiResultVoEnum.ApiException,"商品分页超过单次范围，未完成拉取");
                 if (totalItem > pageSize) {
                     while (totalPage > page) {
+                        if(Thread.currentThread().isInterrupted())return ApiResultVo.error(ApiResultVoEnum.ApiException,"商品分页已取消");
                         page++;
                         String result1 = pullGoodsSkuList(page, pageSize, appKey, appSecret, accessToken);
+                        if(!StringUtils.hasText(result1))return ApiResultVo.error(ApiResultVoEnum.ApiException,"商品后续页无响应，未完成拉取");
                         if (StringUtils.hasText(result1)) {
                             JsonNode jsonObject1 = JsonUtils.readTree(result1);
+                            if(!"0".equals(JsonUtils.text(JsonUtils.node(jsonObject1,"jingdong_sku_read_searchSkuList_responce"),"code")))
+                                return ApiResultVo.error(ApiResultVoEnum.ApiException,"商品后续页失败，未完成拉取");
                             if ("0".equals(JsonUtils.text(JsonUtils.node(jsonObject1, "jingdong_sku_read_searchSkuList_responce"), "code"))) {
                                 skusList.addAll(JsonUtils.list(JsonUtils.node(JsonUtils.node(jsonObject1, "jingdong_sku_read_searchSkuList_responce"), "page"), "data", JdGoodsSkuListResponse.class));
                             }

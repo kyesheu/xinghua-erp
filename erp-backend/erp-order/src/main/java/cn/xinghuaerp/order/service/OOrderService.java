@@ -79,17 +79,4 @@ public interface OOrderService extends IService<OOrder> {
      */
     ResultVo<Long> pushOrderToCloudWarehouse(PushToCloudWarehouseOrderBo bo);
 
-    /**
-     * 取消店铺订单
-     * @param shopOrderId
-     * @return
-     */
-    ResultVo cancelShopOrder(Long shopOrderId);
-
-    /**
-     * 取消抖店订单
-     * @param douOrderId
-     * @return
-     */
-    ResultVo cancelDouOrderMessage(String douOrderId);
 }

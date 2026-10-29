@@ -286,6 +286,27 @@ class ManualShipmentFlowTest {
         } finally { pool.shutdownNow(); }
     }
 
+    @Test void replayedPartialStockOutCannotDeductTwice() {
+        generate(ship());
+        var request=outRequest(4); request.setOutQuantity(0);
+        assertEquals(0,outbound.stockOut(1L,"tester",request).getCode());
+        assertNotEquals(0,outbound.stockOut(1L,"tester",request).getCode());
+        assertStock(96);
+        assertEquals(4,value("SELECT out_total FROM erp_stock_out"));
+    }
+    @Test void concurrentPartialRequestsWithSameObservedQuantityHaveOneWinner() throws Exception {
+        generate(ship());
+        var a=outRequest(4);a.setOutQuantity(0);var b=outRequest(4);b.setOutQuantity(0);
+        var start=new CountDownLatch(1);
+        try(var pool=Executors.newFixedThreadPool(2)) {
+            var first=pool.submit(()->{start.await();return outbound.stockOut(1L,"tester",a).getCode();});
+            var second=pool.submit(()->{start.await();return outbound.stockOut(1L,"tester",b).getCode();});
+            start.countDown();
+            assertTrue((first.get(10,TimeUnit.SECONDS)==0) ^ (second.get(10,TimeUnit.SECONDS)==0));
+        }
+        assertStock(96);
+    }
+
     private Long ship() {
         var result = shipment.ship(shipRequest(), "tester");
         assertEquals(0, result.getCode(), result.getMsg());
@@ -313,6 +334,7 @@ class ManualShipmentFlowTest {
         var request = new StockOutItemRequest();
         request.setEntryItemId(db.queryForObject("SELECT id FROM erp_stock_out_item", Long.class));
         request.setOutQty(quantity);
+        request.setOutQuantity(db.queryForObject("SELECT COALESCE(out_quantity,0) FROM erp_stock_out_item WHERE id=?", Integer.class, request.getEntryItemId()));
         return request;
     }
     private int value(String sql) { return db.queryForObject(sql, Integer.class); }

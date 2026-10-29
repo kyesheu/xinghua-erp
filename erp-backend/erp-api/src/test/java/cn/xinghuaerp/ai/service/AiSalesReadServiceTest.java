@@ -135,4 +135,10 @@ class AiSalesReadServiceTest {
         assertThrows(IllegalArgumentException.class,()->service.skuPerformance(7,new BusinessSubjectScopeService.Scope("WAREHOUSE",1L,null,null),100));
         assertThrows(IllegalArgumentException.class,()->service.skuPerformance(7,new BusinessSubjectScopeService.Scope("HEADQUARTERS",null,null,null),0));
     }
+    @Test void oversizedSkuAggregationFailsInsteadOfReturningFalseFullTotals() {
+        enableSkuPerformance();
+        db.update("INSERT INTO o_order VALUES(1,7,10,?,100,3,'O1')", LocalDate.now().minusDays(1).atStartOfDay());
+        db.update("INSERT INTO o_order_item SELECT 1,X,'SKU',1,1 FROM SYSTEM_RANGE(1,20001)");
+        assertThrows(IllegalArgumentException.class, () -> service.skuPerformance(7,new Scope("MERCHANT",7L,7L,null),100));
+    }
 }

@@ -105,7 +105,7 @@ def explain(state: State):
     settings = model_settings()
     if not settings["enabled"]:
         return {"modelStatus": "disabled", "explanation": None}
-    from langchain_openai import ChatOpenAI
+    from app.core.model_policy import build_chat_model as ChatOpenAI
     from langchain_core.messages import HumanMessage, SystemMessage
 
     try:
@@ -120,7 +120,7 @@ def explain(state: State):
             SystemMessage(content=MARKETING_SYSTEM_PROMPT),
             HumanMessage(
                 content=json.dumps(
-                    {"question": state["facts"].question, "sections": state["sections"]},
+                    {"question": state["facts"].question, "scope": state["facts"].scope, "sections": state["sections"]},
                     ensure_ascii=False,
                 )
             ),

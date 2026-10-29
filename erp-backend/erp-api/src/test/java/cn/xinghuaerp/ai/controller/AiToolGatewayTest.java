@@ -32,13 +32,21 @@ class AiToolGatewayTest {
     private final WarehouseTools warehouseTools = mock(WarehouseTools.class);
     private final StockFlowTools stockFlowTools = mock(StockFlowTools.class);
 
+    private final cn.xinghuaerp.system.service.BusinessAccessService access = mock(cn.xinghuaerp.system.service.BusinessAccessService.class);
+    private final cn.xinghuaerp.system.service.AiAgentPermissionService permissions = mock(cn.xinghuaerp.system.service.AiAgentPermissionService.class);
+    private final cn.xinghuaerp.ai.service.AiInventoryReadService scopedInventory = mock(cn.xinghuaerp.ai.service.AiInventoryReadService.class);
+    private final cn.xinghuaerp.system.service.SalesScope salesScope = new cn.xinghuaerp.system.service.SalesScope(7L, 10L);
+    private final cn.xinghuaerp.system.service.BusinessSubjectScopeService.Scope subject = new cn.xinghuaerp.system.service.BusinessSubjectScopeService.Scope("SHOP",10L,7L,10L);
     private AiToolGateway gateway;
     private HttpServletRequest request;
 
     @BeforeEach
     void setUp() {
         when(python.agentSecret()).thenReturn(SECRET);
-        gateway = new AiToolGateway(python, tokens, goodsTools, orderTools, refundTools, inventoryTools, shopTools,
+        when(permissions.allows(anyLong(), anyString())).thenReturn(true);
+        when(access.scope(anyLong())).thenReturn(subject);
+        when(access.salesScope(anyLong())).thenReturn(salesScope);
+        gateway = new AiToolGateway(python, tokens, access, permissions, scopedInventory, goodsTools, orderTools, refundTools, inventoryTools, shopTools,
                 purchaseTools, memberTools, supplierTools, logisticsTools, warehouseTools, stockFlowTools);
         request = mock(HttpServletRequest.class);
         when(request.getRemoteAddr()).thenReturn("127.0.0.1");
@@ -69,12 +77,12 @@ class AiToolGatewayTest {
 
     @Test
     void dispatchesByResourceAndClampsLimit() {
-        when(orderTools.getOrderList(7, null, 100)).thenReturn("订单表");
+        when(orderTools.getOrderList(7, null, 100, salesScope)).thenReturn("订单表");
         var result = gateway.query(new AiToolGateway.ToolQuery("order.list", Map.of("days", "7")), SECRET, tokens.issue(9L), request);
         assertEquals("order.list", result.get("resource"));
         assertEquals("订单表", result.get("text"));
 
-        when(inventoryTools.getInventoryList(5, 500)).thenReturn("库存表");
+        when(inventoryTools.getInventoryList(5, 500, subject)).thenReturn("库存表");
         assertEquals("库存表", gateway.query(new AiToolGateway.ToolQuery("inventory.list",
                 Map.of("availableLte", 5, "limit", 99999)), SECRET, tokens.issue(9L), request).get("text"));
     }
@@ -93,5 +101,11 @@ class AiToolGatewayTest {
         for (int i = 0; i < 11; i++) params.put("p" + i, i);
         assertThrows(ResponseStatusException.class,
                 () -> gateway.query(new AiToolGateway.ToolQuery("shop.list", params), SECRET, tokens.issue(1L), request));
+    }
+    @Test void permissionAndSubjectAreCheckedBeforeAnyGlobalTool() {
+        when(permissions.allows(9L,"ai:sales:query")).thenReturn(false);
+        assertThrows(ResponseStatusException.class, () -> gateway.query(new AiToolGateway.ToolQuery("order.list",Map.of()),SECRET,tokens.issue(9L),request));
+        assertThrows(ResponseStatusException.class, () -> gateway.query(new AiToolGateway.ToolQuery("purchase.list",Map.of()),SECRET,tokens.issue(9L),request));
+        verifyNoInteractions(orderTools, purchaseTools);
     }
 }

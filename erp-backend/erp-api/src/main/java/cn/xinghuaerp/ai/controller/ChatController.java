@@ -27,6 +27,15 @@ public class ChatController extends BaseController {
 
     @PostMapping(value = "/chat/send", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(@RequestBody ChatSendRequest req) {
+        if (req == null || req.getMessage() == null || req.getMessage().isBlank()) {
+            throw new IllegalArgumentException("消息不能为空");
+        }
+        if (req.getMessage().length() > 8000) {
+            throw new IllegalArgumentException("消息不能超过8000个字符");
+        }
+        if (req.getSessionId() != null && req.getSessionId().length() > 64) {
+            throw new IllegalArgumentException("会话标识不能超过64个字符");
+        }
         String sessionId = req.getSessionId() != null && !req.getSessionId().isEmpty()
                 ? req.getSessionId() : UUID.randomUUID().toString();
         Long userId = getUserId();
@@ -44,12 +53,11 @@ public class ChatController extends BaseController {
     }
 
     @GetMapping("/chat/history")
-    public AjaxResult getHistory(@RequestParam String sessionId) {
-        List<AiConversationHistory> list = historyService.getConversation(sessionId);
-        // 会话历史按 sessionId 全局存储：不允许读取他人的会话，哪怕 sessionId 是 UUID 也不赌猜不中。
-        if (list != null && list.stream().anyMatch(h -> h.getUserId() != null && !h.getUserId().equals(getUserId()))) {
-            throw new AccessDeniedException("无权查看该会话");
-        }
+    public AjaxResult getHistory(@RequestParam String sessionId,
+                                 @RequestParam(required=false) Long beforeTimestamp,
+                                 @RequestParam(required=false) Long beforeId,
+                                 @RequestParam(defaultValue="50") int limit) {
+        List<AiConversationHistory> list = historyService.getConversationPage(sessionId,getUserId(),beforeTimestamp,beforeId,limit);
         return AjaxResult.success(list);
     }
 

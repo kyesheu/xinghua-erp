@@ -245,6 +245,8 @@ public class ErpStockOutServiceImpl extends ServiceImpl<ErpStockOutMapper, ErpSt
                 || !java.util.Objects.equals(item.getWarehouseId(), entry.getWarehouseId()))
             return ResultVo.error("出库单和明细主体不一致");
         int completed = item.getOutQuantity() == null ? 0 : item.getOutQuantity();
+        if (request.getOutQuantity() == null || request.getOutQuantity() < 0 || request.getOutQuantity() != completed)
+            return ResultVo.error("出库进度已变化或缺少已出库数量，请刷新后核对，勿直接重复提交");
         if (item.getOriginalQuantity() == null || Integer.valueOf(2).equals(item.getStatus())
                 || request.getOutQty() > item.getOriginalQuantity() - completed)
             return ResultVo.error("出库数量不能超过剩余待出库数量");

@@ -21,10 +21,11 @@ import java.util.List;
 public class OShopPullLasttimeServiceImpl extends ServiceImpl<OShopPullLasttimeMapper, OShopPullLasttime>
     implements OShopPullLasttimeService {
     private final OShopPullLasttimeMapper mapper;
+    private final cn.xinghuaerp.system.mapper.OShopMapper shops;
 
     @Override
     public OShopPullLasttime getLasttimeByShop(Long shopId, String pullType) {
-        List<OShopPullLasttime> oShopPullLasttimes = mapper.selectList(new LambdaQueryWrapper<OShopPullLasttime>().eq(OShopPullLasttime::getShopId, shopId).eq(OShopPullLasttime::getPullType, pullType));
+        List<OShopPullLasttime> oShopPullLasttimes = mapper.selectList(new LambdaQueryWrapper<OShopPullLasttime>().eq(OShopPullLasttime::getShopId, shopId).eq(OShopPullLasttime::getPullType, pullType).orderByDesc(OShopPullLasttime::getLasttime,OShopPullLasttime::getId).last("LIMIT 1"));
         if(oShopPullLasttimes != null && !oShopPullLasttimes.isEmpty()) return oShopPullLasttimes.get(0);
         else return null;
     }
@@ -35,6 +36,17 @@ public class OShopPullLasttimeServiceImpl extends ServiceImpl<OShopPullLasttimeM
                 .eq(OShopPullLasttime::getShopId, shopId));
 
         return list;
+    }
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    public boolean advance(Long shopId,String pullType,java.time.LocalDateTime time) {
+        if(shopId==null || shopId<=0 || time==null || !java.util.Set.of("ORDER","REFUND","GOODS").contains(pullType))throw new IllegalArgumentException("拉取进度参数无效");
+        if(shops.selectOne(new LambdaQueryWrapper<cn.xinghuaerp.system.entity.OShop>().eq(cn.xinghuaerp.system.entity.OShop::getId,shopId).last("FOR UPDATE"))==null)throw new IllegalStateException("店铺不存在");
+        var current=getLasttimeByShop(shopId,pullType);
+        if(current!=null && current.getLasttime()!=null && !current.getLasttime().isBefore(time))return true;
+        var row=new OShopPullLasttime();row.setShopId(shopId);row.setPullType(pullType);row.setLasttime(time);
+        if(current==null){row.setCreateTime(java.time.LocalDateTime.now());return mapper.insert(row)==1;}
+        row.setId(current.getId());row.setUpdateTime(java.time.LocalDateTime.now());return mapper.updateById(row)==1;
     }
 }
 

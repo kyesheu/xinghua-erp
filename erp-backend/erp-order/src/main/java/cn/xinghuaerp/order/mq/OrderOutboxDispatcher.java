@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 import java.util.concurrent.TimeUnit;
 
-/** 锁定一条待发事件直到确认结束；宕机或确认不明时保留，允许重复投递。 */
+/** 短事务领取租约，网络发送不占用数据库事务；过期重领允许重复投递。 */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -22,35 +22,36 @@ public class OrderOutboxDispatcher {
     private final RabbitTemplate rabbitTemplate;
     private final org.springframework.transaction.PlatformTransactionManager transactionManager;
 
+    record Claimed(String id,String payload,String lease) {}
+
+    Claimed claim() {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            var rows=jdbc.queryForList("SELECT message_id,payload FROM order_event_outbox WHERE sent_at IS NULL AND next_attempt_at<=CURRENT_TIMESTAMP AND (lease_until IS NULL OR lease_until<=CURRENT_TIMESTAMP) ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED");
+            if(rows.isEmpty())return null;
+            String id=(String)rows.get(0).get("message_id");String lease=java.util.UUID.randomUUID().toString();
+            jdbc.update("UPDATE order_event_outbox SET lease_token=?,lease_until=? WHERE message_id=?",lease,java.sql.Timestamp.from(java.time.Instant.now().plusSeconds(30)),id);
+            return new Claimed(id,rows.get(0).get("payload").toString(),lease);
+        });
+    }
+
     @Scheduled(fixedDelayString = "${erp.mq.outbox-delay-ms:5000}")
     public void dispatch() {
-        for (int i = 0; i < 20; i++) {
-            if (Thread.currentThread().isInterrupted()) break;
-            Boolean sent = new TransactionTemplate(transactionManager).execute(status -> {
-                var rows = jdbc.queryForList("SELECT message_id, payload FROM order_event_outbox WHERE sent_at IS NULL AND next_attempt_at <= CURRENT_TIMESTAMP ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED");
-                if (rows.isEmpty()) return false;
-                String id = (String) rows.get(0).get("message_id");
-                try {
-                    var correlation = new CorrelationData(id);
-                    rabbitTemplate.convertAndSend(OrderMqConfig.ORDER_EXCHANGE,
-                            OrderMqConfig.ORDER_CREATED_ROUTING_KEY, rows.get(0).get("payload").toString(), message -> {
-                                message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-                                message.getMessageProperties().setMessageId(id);
-                                return message;
-                            }, correlation);
-                    var confirm = correlation.getFuture().get(5, TimeUnit.SECONDS);
-                    if (!confirm.ack() || correlation.getReturned() != null)
-                        throw new IllegalStateException("消息未被交换机确认或未路由至队列");
-                    jdbc.update("UPDATE order_event_outbox SET sent_at=CURRENT_TIMESTAMP WHERE message_id=?", id);
-                } catch (Exception e) {
-                    if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                    jdbc.update("UPDATE order_event_outbox SET attempts=attempts+1, next_attempt_at=DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 SECOND) WHERE message_id=?", id);
-                    log.warn("订单事件投递失败，保留待重试：messageId={}", id, e);
-                    if (Thread.currentThread().isInterrupted()) return false;
-                }
-                return true;
-            });
-            if (!Boolean.TRUE.equals(sent)) break;
+        for(int i=0;i<20 && !Thread.currentThread().isInterrupted();i++) {
+            var event=claim();if(event==null)break;
+            try {
+                var correlation=new CorrelationData(event.id());
+                rabbitTemplate.convertAndSend(OrderMqConfig.ORDER_EXCHANGE,OrderMqConfig.ORDER_CREATED_ROUTING_KEY,event.payload(),message->{
+                    message.getMessageProperties().setDeliveryMode(MessageDeliveryMode.PERSISTENT);
+                    message.getMessageProperties().setMessageId(event.id());return message;
+                },correlation);
+                var confirm=correlation.getFuture().get(5,TimeUnit.SECONDS);
+                if(!confirm.ack() || correlation.getReturned()!=null)throw new IllegalStateException("消息未确认或未路由");
+                jdbc.update("UPDATE order_event_outbox SET sent_at=CURRENT_TIMESTAMP,lease_until=NULL,lease_token=NULL WHERE message_id=? AND lease_token=? AND sent_at IS NULL",event.id(),event.lease());
+            } catch(Exception error) {
+                if(error instanceof InterruptedException)Thread.currentThread().interrupt();
+                jdbc.update("UPDATE order_event_outbox SET attempts=attempts+1,next_attempt_at=?,lease_until=NULL,lease_token=NULL WHERE message_id=? AND lease_token=? AND sent_at IS NULL",java.sql.Timestamp.from(java.time.Instant.now().plusSeconds(30)),event.id(),event.lease());
+                log.warn("订单事件投递失败，保留待重试：messageId={} errorType={}",event.id(),error.getClass().getSimpleName());
+            }
         }
     }
 }

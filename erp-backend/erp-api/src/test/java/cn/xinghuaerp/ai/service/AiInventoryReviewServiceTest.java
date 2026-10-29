@@ -35,4 +35,17 @@ class AiInventoryReviewServiceTest {
         } catch (Exception e) { throw new AssertionError(e); } finally { pool.shutdownNow(); }
         db.execute("SHUTDOWN");
     }
+    @Test void failedFirstPageDoesNotHideLaterPendingTasksAndScanWraps() throws Exception {
+        var ds=new JdbcDataSource();ds.setURL("jdbc:h2:mem:"+UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1");var db=new JdbcTemplate(ds);
+        java.nio.file.Path root=java.nio.file.Path.of("").toAbsolutePath();while(!java.nio.file.Files.exists(root.resolve("docs/sql/ai-inventory-review.sql")))root=root.getParent();
+        String ddl=java.nio.file.Files.readString(root.resolve("docs/sql/ai-inventory-review.sql"));
+        String create=ddl.substring(ddl.indexOf("CREATE TABLE"),ddl.indexOf(";",ddl.indexOf("CREATE TABLE")));
+        create=create.replaceAll("(?s)ENGINE=.*", "");db.execute(create);
+        var service=new AiInventoryReviewService(db);
+        for(int i=1;i<=25;i++)db.update("INSERT INTO ai_inventory_review_task(id,created_by,request_key,sku_id,warehouse_id,request_json,facts_json,result_json,suggested_quantity,status,version,created_at) VALUES(?,7,?,1,1,'{}','{}','{}',1,'PENDING',1,CURRENT_TIMESTAMP)",String.format("%036d",i),"key"+i);
+        var first=service.pendingWorkflowSync("");assertEquals(20,first.size());
+        var next=service.pendingWorkflowSync(first.getLast().id());assertEquals(5,next.size());
+        assertEquals(first.getFirst().id(),service.pendingWorkflowSync(next.getLast().id()).getFirst().id());
+        db.execute("SHUTDOWN");
+    }
 }

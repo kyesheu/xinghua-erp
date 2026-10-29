@@ -245,4 +245,9 @@ class AiInventoryReadServiceTest {
         assertNull(service.overview(1,50,new Scope("WAREHOUSE",1L,null,null),false,true).records().get(0).getOpenPurchaseOrders());
         assertEquals(3L, service.overview(1,50,new Scope("HEADQUARTERS",null,null,null),false,true).records().stream().filter(r -> r.getSkuId().equals("5")).findFirst().orElseThrow().getOpenPurchaseOrders());
     }
+    @Test void riskSummaryRejectsOversizedCatalogInsteadOfReportingPartialTotals() {
+        var mapper=org.mockito.Mockito.mock(AiInventoryMapper.class);
+        org.mockito.Mockito.when(mapper.allOverview(null,null,null)).thenReturn(java.util.Collections.nCopies(20001,new cn.xinghuaerp.ai.vo.AiInventoryOverviewRow()));
+        assertThrows(IllegalArgumentException.class, () -> new AiInventoryReadService(mapper).riskSummary(new Scope("HEADQUARTERS",null,null,null)));
+    }
 }

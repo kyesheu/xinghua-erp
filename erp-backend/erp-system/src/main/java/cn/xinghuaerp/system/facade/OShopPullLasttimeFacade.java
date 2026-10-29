@@ -9,4 +9,5 @@ public interface OShopPullLasttimeFacade {
     List<OShopPullLasttime> getLasttimeByShop(Long shopId);
     boolean save(OShopPullLasttime entity);
     boolean updateById(OShopPullLasttime entity);
+    boolean advance(Long shopId,String pullType,java.time.LocalDateTime time);
 }

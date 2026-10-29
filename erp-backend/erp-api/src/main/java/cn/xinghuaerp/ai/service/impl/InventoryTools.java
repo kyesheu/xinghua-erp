@@ -15,12 +15,31 @@ import java.util.List;
 public class InventoryTools {
 
     private final OGoodsInventoryService inventoryService;
+    public String getInventoryList(Integer availableLte, Integer limit) {
+        return getInventoryList(availableLte, limit, new cn.xinghuaerp.system.service.BusinessSubjectScopeService.Scope("HEADQUARTERS", null, null, null));
+    }
     public String getInventoryList(
             Integer availableLte,
-            Integer limit) {
+            Integer limit, cn.xinghuaerp.system.service.BusinessSubjectScopeService.Scope scope) {
         if (limit == null || limit <= 0) limit = 100;
 
         LambdaQueryWrapper<OGoodsInventory> wrapper = new LambdaQueryWrapper<>();
+        java.util.Objects.requireNonNull(scope, "缺少数据范围");
+        switch (scope.type()) {
+            case "HEADQUARTERS" -> { }
+            case "MERCHANT", "SHOP" -> {
+                if (scope.merchantId() == null || ("SHOP".equals(scope.type()) && scope.shopId() == null))
+                    throw new IllegalArgumentException("业务范围无效");
+                wrapper.eq(OGoodsInventory::getMerchantId, scope.merchantId());
+                wrapper.eq(scope.shopId() != null, OGoodsInventory::getShopId, scope.shopId());
+            }
+            case "WAREHOUSE" -> {
+                if (scope.subjectId() == null) throw new IllegalArgumentException("仓库范围无效");
+                wrapper.eq(OGoodsInventory::getWarehouseId, scope.subjectId());
+            }
+            default -> throw new org.springframework.security.access.AccessDeniedException("无库存访问范围");
+        }
+        wrapper.eq(OGoodsInventory::getIsDelete, 0);
         if (availableLte != null) {
             wrapper.le(OGoodsInventory::getAvailableQuantity, availableLte);
         }

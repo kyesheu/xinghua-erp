@@ -5,6 +5,9 @@ spring:
   # 本服务不装配任何模型客户端：模型调用全部由 ai-service（Python + LangGraph）承担，
   # 模型凭据在「AI 智能 > 模型配置」页面维护，调用时经请求头透传给 AI 服务。
   # 因此这里没有 spring.ai.* 配置，未配置密钥也能正常启动。
+  jdbc:
+    template:
+      query-timeout: 10s
   servlet:
     multipart:
       max-file-size: 5MB
@@ -36,7 +39,7 @@ spring:
           # 连接池的最大数据库连接数
           max-active: 8
           # #连接池最大阻塞等待时间（使用负值表示没有限制）
-          max-wait: -1ms
+          max-wait: 1s
   datasource:
     driverClassName: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://127.0.0.1:13370/xinghua-erp?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8

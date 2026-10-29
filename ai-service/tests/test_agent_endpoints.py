@@ -129,7 +129,7 @@ def test_query_erp_sends_resource_and_identity(monkeypatch, tmp_path):
         def __exit__(self, *args):
             return False
 
-        def read(self):
+        def read(self, size=-1):
             return json.dumps({"text": "| 订单号 | 金额 |"}, ensure_ascii=False).encode()
 
     def fake_urlopen(request, timeout):

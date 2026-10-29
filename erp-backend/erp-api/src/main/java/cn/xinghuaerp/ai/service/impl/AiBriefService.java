@@ -35,12 +35,33 @@ public class AiBriefService {
     private final AiConfigService aiConfigService;
     private final PythonAgentClient python;
 
+    private final cn.xinghuaerp.ai.service.SingleFlightCache<String,AiBriefResponse> cache = new cn.xinghuaerp.ai.service.SingleFlightCache<>();
+
     private static final String SYSTEM_PROMPT = "你是电商运营助手，只输出 JSON，不要输出 markdown 标记或解释。";
 
     /**
      * 生成AI工作台简报
      */
     public AiBriefResponse generateBrief() {
+        AiConfig model=aiConfigService.getDefaultConfig();
+        String signature=modelSignature(model);
+        String key="HEADQUARTERS:brief:v1:"+java.time.LocalDate.now()+":"+signature;
+        var response=cache.get(key,()->{
+            var generated=generateUncached();generated.setGeneratedAt(java.time.LocalDateTime.now());return generated;
+        },item->item.isAiAvailable()?60000:5000);
+        // DTO 可变，防止调用方修改缓存的共享实例。
+        return JsonUtils.readValue(JsonUtils.write(response),AiBriefResponse.class);
+    }
+
+    private String modelSignature(AiConfig model) {
+        if(model==null)return "disabled";
+        try {
+            String version=JsonUtils.write(java.util.Arrays.asList(model.getId(),model.getUpdateTime(),model.getApiKey(),model.getApiEndpoint(),model.getModelName(),model.getIsEnabled()));
+            return java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(version.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch(java.security.NoSuchAlgorithmException error) {throw new IllegalStateException(error);}
+    }
+
+    private AiBriefResponse generateUncached() {
         // 1. 获取数据
         Map<String, Object> todayData = getTodayData();
         List<SalesDailyVo> recentSales = getRecentSales();
@@ -194,9 +215,9 @@ public class AiBriefService {
         brief.setGreeting("欢迎使用");
 
         QuickStats qs = new QuickStats();
-        qs.setSalesVolume(String.valueOf(todayData.get("salesVolume")));
-        qs.setOrderCount(((Number)todayData.get("orderCount")).intValue());
-        qs.setWaitShip(((Number)todayData.get("waitShip")).intValue());
+        qs.setSalesVolume(todayData.get("salesVolume")==null?"不可用":String.valueOf(todayData.get("salesVolume")));
+        qs.setOrderCount(todayData.get("orderCount") instanceof Number value?value.intValue():null);
+        qs.setWaitShip(todayData.get("waitShip") instanceof Number value?value.intValue():null);
         brief.setQuickStats(qs);
 
         if (!aiConfigured) {
@@ -219,7 +240,7 @@ public class AiBriefService {
             return brief;
         }
 
-        brief.setAiAvailable(true);
+        brief.setAiAvailable(false);
         brief.setSummary("今日数据已就绪");
         brief.setTrend("AI分析暂不可用，系统自动生成概要");
 
@@ -243,16 +264,15 @@ public class AiBriefService {
      * 获取今日数据
      */
     private Map<String, Object> getTodayData() {
-        Long shopCount = shopService.list().stream().count();
+        Long shopCount = shopService.count();
         SalesDailyVo todaySales = orderService.getTodaySalesDaily(0L);
         Number waitShip = orderService.getWaitShipOrderAllCount(0L);
 
-        return Map.of(
-                "salesVolume", todaySales != null && todaySales.getAmount() != null ? todaySales.getAmount() : 0,
-                "orderCount", todaySales != null && todaySales.getCount() != null ? todaySales.getCount().doubleValue() : 0,
-                "waitShip", waitShip != null ? waitShip.doubleValue() : 0,
-                "shopCount", shopCount != null ? shopCount.doubleValue() : 0
-        );
+        var data=new LinkedHashMap<String,Object>();
+        data.put("salesVolume",todaySales==null?null:todaySales.getAmount());
+        data.put("orderCount",todaySales==null?null:todaySales.getCount());
+        data.put("waitShip",waitShip);data.put("shopCount",shopCount);
+        return data;
     }
 
     /**
@@ -266,6 +286,7 @@ public class AiBriefService {
 
     @lombok.Data
     public static class AiBriefResponse {
+        private java.time.LocalDateTime generatedAt;
         private String greeting = "";
         private String summary = "";
         private String trend = "";

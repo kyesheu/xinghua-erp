@@ -17,15 +17,22 @@ import java.util.List;
 public class RefundTools {
 
     private final ShopRefundService refundService;
+    public String getRefundList(Integer days, String reason, String goodsName, Integer limit) {
+        return getRefundList(days, reason, goodsName, limit, new cn.xinghuaerp.system.service.SalesScope(null, null));
+    }
     public String getRefundList(
             Integer days,
             String reason,
             String goodsName,
-            Integer limit) {
-        if (days == null || days <= 0) days = 90;
+            Integer limit, cn.xinghuaerp.system.service.SalesScope scope) {
+        if (days == null || days <= 0) days = 30;
+        days = Math.min(days, 90);
         if (limit == null || limit <= 0) limit = 200;
 
         LambdaQueryWrapper<ShopRefund> wrapper = new LambdaQueryWrapper<>();
+        java.util.Objects.requireNonNull(scope, "缺少数据范围");
+        wrapper.eq(scope.merchantId() != null, ShopRefund::getMerchantId, scope.merchantId());
+        wrapper.eq(scope.shopId() != null, ShopRefund::getShopId, scope.shopId());
         wrapper.ge(ShopRefund::getCreateOn, LocalDateTime.now().minusDays(days));
         if (reason != null && !reason.isBlank()) {
             wrapper.like(ShopRefund::getReason, reason);

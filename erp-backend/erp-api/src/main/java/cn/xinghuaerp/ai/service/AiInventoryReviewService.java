@@ -38,8 +38,12 @@ public class AiInventoryReviewService {
                 (rs,n)->new Summary(rs.getString("id"),rs.getLong("created_by"),rs.getLong("sku_id"),rs.getLong("warehouse_id"),
                         rs.getInt("suggested_quantity"),rs.getString("status"),rs.getInt("version"),rs.getTimestamp("created_at").toLocalDateTime()));
     }
-    public List<Task> pendingWorkflowSync() {
-        return jdbc.query("SELECT * FROM ai_inventory_review_task WHERE workflow_synced_version < version ORDER BY created_at,id LIMIT 20", (rs,n)->task(rs));
+    public List<Task> pendingWorkflowSync() { return pendingWorkflowSync(""); }
+    public List<Task> pendingWorkflowSync(String afterId) {
+        if(afterId==null || afterId.length()>36)throw new IllegalArgumentException("补偿游标无效");
+        var rows=jdbc.query("SELECT * FROM ai_inventory_review_task WHERE workflow_synced_version < version AND id>? ORDER BY id LIMIT 20",(rs,n)->task(rs),afterId);
+        if(rows.isEmpty() && !afterId.isEmpty())return pendingWorkflowSync("");
+        return rows;
     }
     public void markWorkflowSynced(String id, int version) {
         jdbc.update("UPDATE ai_inventory_review_task SET workflow_synced_version=? WHERE id=? AND version=?",version,id,version);

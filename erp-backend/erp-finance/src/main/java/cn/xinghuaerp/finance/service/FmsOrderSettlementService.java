@@ -27,4 +27,5 @@ public interface FmsOrderSettlementService {
     FmsOrderSettlement getSettlementDetail(Long id);
 
     FmsOrderSettlement calculateOrderSettlement(String orderId);
+    java.util.Map<String,Object> autoSettlement(java.util.List<String> orderIds,String operator,cn.xinghuaerp.system.service.SalesScope scope);
 }

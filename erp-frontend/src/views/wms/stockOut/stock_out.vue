@@ -232,7 +232,7 @@ function handleScan() {
       skuId: item.skuId,
       outQty: scanQty.value,
       originalQuantity: item.originalQuantity,
-      outQuantity: item.outQuantity,
+      outQuantity: item.outQuantity ?? 0,
       batchId: batch.id,
     }).then((result: any) => {
       scanning.value = false
@@ -262,7 +262,7 @@ function submitOutbound() {
       skuId: item.skuId,
       outQty: item.thisQuantity,
       originalQuantity: item.originalQuantity,
-      outQuantity: item.outQuantity,
+      outQuantity: item.outQuantity ?? 0,
     }))
 
   if (items.length === 0) {

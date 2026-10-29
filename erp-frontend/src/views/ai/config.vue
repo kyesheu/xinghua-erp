@@ -37,6 +37,20 @@
       </el-table>
     </el-card>
 
+    <el-collapse style="margin-top: 16px">
+      <el-collapse-item title="总部运行保护（需要模型配置管理权限）" name="operations">
+        <el-button :loading="operationsLoading" @click="loadOperations">刷新运行状态</el-button>
+        <template v-if="operations">
+          <p>今日受控请求 {{ operations.usage.requests }} 次；已确认输入 {{ operations.usage.inputTokens }} Token，输出 {{ operations.usage.outputTokens }} Token；待核对用量 {{ operations.usage.unknownRequests ?? 0 }} 次。</p>
+          <p>订单通知待处理 {{ operations.outbox.pending }} 条，最早记录 {{ operations.outbox.oldestPending || '无' }}。</p>
+          <p>人工暂停：{{ operations.circuit.some(item => !!item.manual_disabled) ? '已暂停' : '未暂停' }}</p>
+          <el-button type="danger" :loading="operationsLoading" @click="changeOperations(false)">暂停模型调用</el-button>
+          <el-button :loading="operationsLoading" @click="changeOperations(true)">解除人工暂停</el-button>
+          <p>解除暂停后，预算、并发限制与故障保护仍然生效。未确认的用量不计入已确认 Token。</p>
+        </template>
+      </el-collapse-item>
+    </el-collapse>
+
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑模型配置' : '添加模型配置'" width="600px" @close="resetForm">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item label="配置名称" prop="name">
@@ -75,6 +89,24 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { listAiConfig, addAiConfig, editAiConfig, delAiConfig, setDefaultAiConfig, testAiConfig } from '@/api/ai/config'
 import type { AiConfig } from '@/api/ai/config'
 import type { FormInstance } from 'element-plus'
+import { getAiOperations, setAiOperationsEnabled } from '@/api/ai/operations'
+import type { AiOperationsSummary } from '@/api/ai/operations'
+
+const operations = ref<AiOperationsSummary | null>(null)
+const operationsLoading = ref(false)
+async function loadOperations() {
+  operationsLoading.value = true
+  try { const res = await getAiOperations(); operations.value = res.data }
+  finally { operationsLoading.value = false }
+}
+async function changeOperations(enabled: boolean) {
+  operationsLoading.value = true
+  try {
+    await setAiOperationsEnabled(enabled)
+    const res = await getAiOperations(); operations.value = res.data
+    ElMessage.success(enabled ? '已解除人工暂停' : '已暂停模型调用')
+  } finally { operationsLoading.value = false }
+}
 
 const loading = ref(false)
 const saving = ref(false)

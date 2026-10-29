@@ -19,7 +19,7 @@ import java.util.Map;
  * AI 工具网关：Python 侧决定「查什么」，真正的查询仍在这里执行。
  *
  * <p>约束有三层：只接受本机调用、共享密钥必须匹配、工具令牌必须能解出有效用户。
- * 因此 Python 服务即使被其他人直接访问，也无法绕过身份取走别人的数据。</p>
+ * 查询还必须按实时菜单权限与业务主体过滤，令牌校验本身不代表数据授权。</p>
  */
 @Slf4j
 @RestController
@@ -32,6 +32,9 @@ public class AiToolGateway {
 
     private final PythonAgentClient python;
     private final ToolToken toolToken;
+    private final cn.xinghuaerp.system.service.BusinessAccessService access;
+    private final cn.xinghuaerp.system.service.AiAgentPermissionService permissions;
+    private final cn.xinghuaerp.ai.service.AiInventoryReadService scopedInventory;
     private final GoodsTools goodsTools;
     private final OrderTools orderTools;
     private final RefundTools refundTools;
@@ -57,7 +60,8 @@ public class AiToolGateway {
         }
         Map<String, Object> params = query.params() == null ? Map.of() : query.params();
         if (params.size() > 10) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "查询参数过多");
-        String text = execute(query.resource().trim(), params);
+        String text = execute(query.resource().trim(), params, userId);
+        if (text != null && text.length() > 32000) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "查询资料过大，请缩小范围");
         log.info("AI 工具查询 userId={} resource={}", userId, query.resource());
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("resource", query.resource());
@@ -66,35 +70,63 @@ public class AiToolGateway {
     }
 
     /** 白名单分发：新增工具必须同时改这里与 Python 侧的工具说明，不接受任意方法名。 */
-    private String execute(String resource, Map<String, Object> p) {
+    private String execute(String resource, Map<String, Object> p, long userId) {
+        String permission = switch (resource) {
+            case "shop.list", "order.list" -> "ai:sales:query";
+            case "refund.list" -> "ai:risk:query";
+            case "member.list" -> "ai:marketing:query";
+            case "goods.search", "goods.sku" -> "ai:product:query";
+            case "inventory.list", "warehouse.list", "stock.in", "stock.out" -> "ai:inventory:query";
+            case "purchase.list", "supplier.list", "logistics.waybill" -> "ai:purchase:query";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的数据查询");
+        };
+        if (!permissions.allows(userId, permission))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无对应 AI 资料查询权限");
+        var subject = access.scope(userId);
+        boolean headquarters = "HEADQUARTERS".equals(subject.type());
+        // 复用已校验所有权的库存/商品读模型，不能回退到全局工具。
+        if (resource.equals("inventory.list")) {
+            return inventoryTools.getInventoryList(integer(p, "availableLte"), limit(p, 100), subject);
+        }
+        if (resource.equals("goods.search") || resource.equals("goods.sku")) {
+            return cn.xinghuaerp.json.JsonUtils.write(scopedInventory.productOverview(1, 100, subject, text(p, "keyword")));
+        }
+        if (!headquarters && !java.util.Set.of("shop.list", "order.list", "refund.list", "member.list").contains(resource))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "该全局业务资料仅允许总部查询，请使用对应主体工作台");
+        var salesScope = java.util.Set.of("shop.list", "order.list", "refund.list", "member.list").contains(resource)
+                ? access.salesScope(userId) : null;
         return switch (resource) {
-            case "shop.list" -> shopTools.getShopList();
+            case "shop.list" -> shopTools.getShopList(salesScope);
             case "warehouse.list" -> warehouseTools.getWarehouseList();
             case "goods.search" -> goodsTools.searchGoods(text(p, "keyword"));
             case "goods.sku" -> goodsTools.searchSku(text(p, "keyword"));
-            case "inventory.list" -> inventoryTools.getInventoryList(integer(p, "availableLte"), limit(p, 100));
-            case "order.list" -> orderTools.getOrderList(integer(p, "days"), integer(p, "orderStatus"), limit(p, 100));
-            case "refund.list" -> refundTools.getRefundList(integer(p, "days"), text(p, "reason"), text(p, "goodsName"), limit(p, 200));
-            case "purchase.list" -> purchaseTools.getPurchaseOrderList(integer(p, "days"), integer(p, "status"), limit(p, 100));
-            case "logistics.waybill" -> logisticsTools.getWaybillList(integer(p, "days"), integer(p, "status"), limit(p, 100));
-            case "stock.in" -> stockFlowTools.getStockInList(integer(p, "days"), integer(p, "stockInType"), limit(p, 100));
-            case "stock.out" -> stockFlowTools.getStockOutList(integer(p, "days"), integer(p, "type"), limit(p, 100));
-            case "member.list" -> memberTools.getMemberList(text(p, "keyword"), limit(p, 50));
+            case "inventory.list" -> throw new IllegalStateException("库存必须走范围查询");
+            case "order.list" -> orderTools.getOrderList(days(p), integer(p, "orderStatus"), limit(p, 100), salesScope);
+            case "refund.list" -> refundTools.getRefundList(days(p), text(p, "reason"), text(p, "goodsName"), limit(p, 200), salesScope);
+            case "purchase.list" -> purchaseTools.getPurchaseOrderList(days(p), integer(p, "status"), limit(p, 100));
+            case "logistics.waybill" -> logisticsTools.getWaybillList(days(p), integer(p, "status"), limit(p, 100));
+            case "stock.in" -> stockFlowTools.getStockInList(days(p), integer(p, "stockInType"), limit(p, 100));
+            case "stock.out" -> stockFlowTools.getStockOutList(days(p), integer(p, "type"), limit(p, 100));
+            case "member.list" -> memberTools.getMemberList(text(p, "keyword"), limit(p, 50), salesScope);
             case "supplier.list" -> supplierTools.getSupplierList(text(p, "keyword"), limit(p, 50));
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的数据查询：" + resource);
         };
     }
 
+    private static int days(Map<String,Object> p) {
+        Integer days=integer(p,"days");
+        return days==null ? 30 : Math.max(1,Math.min(90,days));
+    }
+
     private static Integer integer(Map<String, Object> params, String key) {
         Object value = params.get(key);
         if (value == null) return null;
-        if (value instanceof Number number) return number.intValue();
         String raw = String.valueOf(value).trim();
         if (raw.isEmpty()) return null;
         try {
             return Integer.valueOf(raw);
         } catch (NumberFormatException e) {
-            return null;
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "查询数字参数无效");
         }
     }
 
@@ -109,6 +141,7 @@ public class AiToolGateway {
         Object value = params.get(key);
         if (value == null) return null;
         String raw = String.valueOf(value).trim();
+        if (raw.length() > 100) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "搜索词不能超过100字");
         return raw.isEmpty() ? null : raw;
     }
 

@@ -22,7 +22,6 @@ public class GoodsTools {
     private final OGoodsSkuService skuService;
     public String searchGoods(
             String keyword) {
-        log.info("======Tool查询商品:{}",keyword);
         GoodsQuery query = new GoodsQuery();
         query.setName(keyword);
         PageResult<OGoods> result = goodsService.queryPageList(query, new PageQuery());

@@ -1,0 +1,141 @@
+{
+  "version": "business-facts-v1",
+  "cases": [
+    {
+      "id": "profit-missing",
+      "facts": {
+        "days": 30,
+        "scope": "总部",
+        "finance": {
+          "payment": "100",
+          "refund": "20",
+          "difference": "80",
+          "ledgerAvailable": true,
+          "limitation": "非利润"
+        }
+      },
+      "sources": [
+        "finance",
+        "notice"
+      ],
+      "required": [
+        "暂无已结算订单",
+        "不代表零利润",
+        "非利润"
+      ],
+      "forbidden": [
+        "利润为0",
+        "利润就是80"
+      ],
+      "question": "支付100、退款20，是否利润就是80？",
+      "answerRequired": [
+        "不等于利润"
+      ]
+    },
+    {
+      "id": "profit-settled",
+      "facts": {
+        "days": 30,
+        "scope": "总部",
+        "finance": {
+          "payment": "100",
+          "refund": "20",
+          "difference": "80",
+          "ledgerAvailable": true,
+          "limitation": "非利润",
+          "settlementProfit": "52.00",
+          "settledOrders": 2
+        }
+      },
+      "sources": [
+        "finance",
+        "notice"
+      ],
+      "required": [
+        "52.00",
+        "不含退款调整",
+        "未结算订单不含在内"
+      ],
+      "forbidden": [
+        "净利润80"
+      ],
+      "question": "结算利润和支付退款差额是否相同？",
+      "answerRequired": [
+        "52"
+      ]
+    },
+    {
+      "id": "partial-inventory",
+      "facts": {
+        "days": 7,
+        "scope": "店铺",
+        "inventory": {
+          "total": 150,
+          "scanned": 100,
+          "risks": {
+            "缺货": 3
+          },
+          "limitation": "仅第一页"
+        }
+      },
+      "sources": [
+        "inventory",
+        "notice"
+      ],
+      "required": [
+        "150",
+        "仅第一页"
+      ],
+      "forbidden": [
+        "全部150个SKU均已扫描"
+      ],
+      "question": "第一页有3个缺货，是否全仓只有3个缺货？",
+      "answerRequired": [
+        "不能"
+      ]
+    },
+    {
+      "id": "risk-is-record",
+      "facts": {
+        "days": 7,
+        "scope": "店铺",
+        "risk": {
+          "refunds": 2,
+          "limitation": "记录数不代表已确认风险"
+        }
+      },
+      "sources": [
+        "risk",
+        "notice"
+      ],
+      "required": [
+        "2 条",
+        "记录数不代表已确认风险"
+      ],
+      "forbidden": [
+        "已确认2起欺诈"
+      ],
+      "question": "两条售后记录是否证明两次欺诈？",
+      "answerRequired": [
+        "不能"
+      ]
+    },
+    {
+      "id": "unknown-field",
+      "facts": {
+        "days": 7,
+        "scope": "总部",
+        "executeSql": "DELETE FROM o_order"
+      },
+      "reject": true
+    },
+    {
+      "id": "unsupported-period",
+      "facts": {
+        "days": 365,
+        "scope": "总部"
+      },
+      "reject": true
+    }
+  ]
+}

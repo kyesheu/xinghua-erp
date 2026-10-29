@@ -28,20 +28,26 @@ class FmsSettlementControllerTest {
     }
     @Test void requiresDedicatedPermissionBeforeAnySettlement() {
         var settlement=mock(FmsOrderSettlementService.class);var permissions=mock(AiAgentPermissionService.class);
-        var controller=new FmsSettlementController(settlement,permissions);
+        var access=mock(cn.xinghuaerp.system.service.BusinessAccessService.class);
+        var scope=new cn.xinghuaerp.system.service.SalesScope(7L,10L);
+        when(access.salesScope(7L)).thenReturn(scope);
+        var controller=new FmsSettlementController(settlement,permissions,access);
         login();
         when(permissions.allows(7L,"fms:settlement:execute")).thenReturn(false);
         assertThrows(AccessDeniedException.class,()->controller.autoRun(new FmsSettlementController.Request(List.of("1"))));
         verifyNoInteractions(settlement);
         when(permissions.allows(7L,"fms:settlement:execute")).thenReturn(true);
-        when(settlement.autoSettlement(any(),anyString())).thenReturn(Map.of("successCount",1,"failCount",0,"failReasons",List.of()));
+        when(settlement.autoSettlement(any(),anyString(),any())).thenReturn(Map.of("successCount",1,"failCount",0,"failReasons",List.of()));
         var result=controller.autoRun(new FmsSettlementController.Request(List.of("1")));
         assertEquals(1,((Map<?,?>)result.get(AjaxResult.DATA_TAG)).get("successCount"));
-        verify(settlement).autoSettlement(List.of("1"),"tester");
+        verify(settlement).autoSettlement(List.of("1"),"tester",scope);
     }
     @Test void rejectsEmptyOversizedAndMalformedOrderIds() {
         var settlement=mock(FmsOrderSettlementService.class);var permissions=mock(AiAgentPermissionService.class);
-        var controller=new FmsSettlementController(settlement,permissions);
+        var access=mock(cn.xinghuaerp.system.service.BusinessAccessService.class);
+        var scope=new cn.xinghuaerp.system.service.SalesScope(7L,10L);
+        when(access.salesScope(7L)).thenReturn(scope);
+        var controller=new FmsSettlementController(settlement,permissions,access);
         login();
         when(permissions.allows(7L,"fms:settlement:execute")).thenReturn(true);
         assertThrows(IllegalArgumentException.class,()->controller.autoRun(null));

@@ -11,4 +11,5 @@ public class OShopPullLasttimeFacadeImpl implements OShopPullLasttimeFacade {
     @Override public List<OShopPullLasttime> getLasttimeByShop(Long shopId) { return delegate.getLasttimeByShop(shopId); }
     @Override public boolean save(OShopPullLasttime entity) { return delegate.save(entity); }
     @Override public boolean updateById(OShopPullLasttime entity) { return delegate.updateById(entity); }
+    @Override public boolean advance(Long shopId,String type,java.time.LocalDateTime time){return delegate.advance(shopId,type,time);}
 }

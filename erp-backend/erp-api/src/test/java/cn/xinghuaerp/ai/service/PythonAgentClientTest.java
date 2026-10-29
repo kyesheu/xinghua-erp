@@ -112,14 +112,14 @@ class PythonAgentClientTest {
         assertEquals("deepseek-chat", seen.get().modelName());
     }
 
-    /** 流式响应按行解析：事件类型原样透传，非 JSON 行降级为文本，不能整段丢弃。 */
-    @Test void dispatchesNdjsonEventsAndKeepsPlainText() {
+    /** 流式响应按行解析：事件类型原样透传，非 JSON 行拒绝处理，不能伪装成模型答案。 */
+    @Test void dispatchesStructuredEventsAndRejectsUnframedText() {
         var seen = new java.util.ArrayList<String>();
         PythonAgentClient.StreamListener listener = (type, content) -> seen.add(type + ":" + content);
         PythonAgentClient.dispatch("{\"type\":\"message\",\"content\":\"你好\"}", listener);
         PythonAgentClient.dispatch("{\"type\":\"done\"}", listener);
-        PythonAgentClient.dispatch("纯文本一行", listener);
-        assertEquals(java.util.List.of("message:你好", "done:", "message:纯文本一行"), seen);
+        assertThrows(IllegalStateException.class,()->PythonAgentClient.dispatch("纯文本一行", listener));
+        assertEquals(java.util.List.of("message:你好", "done:"), seen);
     }
 
     /** 错误体里的 detail 要透出，否则页面只能看到「调用失败」而不知道原因。 */

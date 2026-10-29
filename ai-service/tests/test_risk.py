@@ -108,7 +108,8 @@ def test_risk_model_is_opt_in_and_limited_to_curated_sections(monkeypatch):
     assert "请人工联系买家核实并更新售后状态。" in seen[1].content
     import json
     payload = json.loads(seen[1].content)
-    assert set(payload) == {"question", "sections"}
+    assert set(payload) == {"question", "scope", "sections"}
+    assert payload["scope"]
     assert all(set(section) == {"source", "name", "summary", "limitation"} for section in payload["sections"])
 
 

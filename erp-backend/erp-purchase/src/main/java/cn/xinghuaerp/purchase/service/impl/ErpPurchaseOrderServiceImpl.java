@@ -289,7 +289,8 @@ public class ErpPurchaseOrderServiceImpl extends ServiceImpl<ErpPurchaseOrderMap
             erpPurchaseOrder.setStatus(101);
             erpPurchaseOrder.setRemark(request.getRemark());
             erpPurchaseOrder.setSupplierConfirmTime(LocalDateTime.now());
-            erpPurchaseOrderMapper.updateById(erpPurchaseOrder);
+            return erpPurchaseOrderMapper.update(erpPurchaseOrder,new LambdaQueryWrapper<ErpPurchaseOrder>()
+                    .eq(ErpPurchaseOrder::getId,order.getId()).eq(ErpPurchaseOrder::getStatus,order.getStatus()));
         }
         else if (request.getOptionType().equals("SupplierShip")) {
             if(order.getStatus() !=101 && order.getStatus()!=1){
@@ -353,7 +354,8 @@ public class ErpPurchaseOrderServiceImpl extends ServiceImpl<ErpPurchaseOrderMap
             erpPurchaseOrder.setRemark(request.getRemark());
             erpPurchaseOrder.setSupplierDeliveryTime(LocalDateTime.now());
             erpPurchaseOrder.setShipAmount(request.getShipCost());
-            erpPurchaseOrderMapper.updateById(erpPurchaseOrder);
+            return erpPurchaseOrderMapper.update(erpPurchaseOrder,new LambdaQueryWrapper<ErpPurchaseOrder>()
+                    .eq(ErpPurchaseOrder::getId,order.getId()).eq(ErpPurchaseOrder::getStatus,order.getStatus()));
         }
         else if (request.getOptionType().equals("cancel")) {
             if(order.getStatus() !=0 && order.getStatus()!=1){
@@ -366,7 +368,8 @@ public class ErpPurchaseOrderServiceImpl extends ServiceImpl<ErpPurchaseOrderMap
             erpPurchaseOrder.setUpdateTime(DateUtils.getNowDate());
             erpPurchaseOrder.setRemark(request.getRemark());
             erpPurchaseOrder.setStatus(99);
-            erpPurchaseOrderMapper.updateById(erpPurchaseOrder);
+            return erpPurchaseOrderMapper.update(erpPurchaseOrder,new LambdaQueryWrapper<ErpPurchaseOrder>()
+                    .eq(ErpPurchaseOrder::getId,order.getId()).eq(ErpPurchaseOrder::getStatus,order.getStatus()));
         }
         return 1;
     }

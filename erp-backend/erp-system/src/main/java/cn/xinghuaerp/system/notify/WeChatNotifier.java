@@ -9,7 +9,7 @@ import java.util.Map;
 
 @Slf4j
 @Component
-public class WeChatNotifier {
+public class WeChatNotifier implements ChannelNotifier {
 
     public boolean notify(String webhook, String title, String content) {
         try {
@@ -22,11 +22,13 @@ public class WeChatNotifier {
 
             String result = OkHttpClientHelper.post(webhook, body.toString());
             boolean ok = result != null && result.contains("\"errcode\":0");
-            if (!ok) log.warn("企微推送返回异常: {}", result);
+            if (!ok) log.warn("通知渠道返回失败，详情请在服务商控制台核对");
             return ok;
         } catch (Exception e) {
-            log.error("企微推送失败", e);
+            log.warn("企微推送失败" + " errorType={}", e.getClass().getSimpleName());
             return false;
         }
     }
+    @Override public String type() { return "WECHAT"; }
+    @Override public boolean send(cn.xinghuaerp.system.entity.SysAlertChannel channel,String title,String content) {return notify(channel.getWebhookUrl(), title, content);}
 }
