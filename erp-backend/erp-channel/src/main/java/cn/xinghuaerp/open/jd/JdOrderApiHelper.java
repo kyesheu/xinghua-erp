@@ -9,6 +9,7 @@ import cn.xinghuaerp.open.jd.model.JiaMi;
 import cn.xinghuaerp.open.jd.response.JdOrderDetailResponse;
 import cn.xinghuaerp.open.jd.response.JdOrderListResponse;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,20 @@ public class JdOrderApiHelper {
             "orderState,orderStateRemark,deliveryType,invoiceCode,orderRemark,orderStartTime,orderEndTime,venderRemark,balanceUsed,pin,returnOrder," +
             "paymentConfirmTime,waybill,logisticsId,modified,directParentOrderId,parentOrderId,orderSource,storeOrder,realPin,open_id,open_id_buyer," +
             "invoiceInfo,invoiceEasyInfo,itemInfoList,isShipmenttype,scDT,idSopShipmenttype,orderStartTime,consigneeInfo,orderMarkDesc,couponDetailList";
+
+    /**
+     * 分页壳的取数入口。真实实现就是下面的 {@link #pullOrder} 重载（发 HTTP）。
+     *
+     * <p>抽出这一层的唯一理由是测试：京东地址 {@code https://api.jd.com/routerjson} 是写死的，
+     * 若不替换取数入口，「第 2 页失败」这条分支在无外网环境里永远走不到（第 1 页会先联网失败）。
+     * 生产路径永远是方法引用 {@code JdOrderApiHelper::pullOrder}，没有任何分支能改变这一点。
+     */
+    @FunctionalInterface
+    interface PageFetcher {
+        String fetch(LocalDateTime startTime, LocalDateTime endTime, Integer pageNo, Integer pageSize,
+                     String appKey, String appSecret, String accessToken);
+    }
+
     protected static String pullOrder( LocalDateTime startTime, LocalDateTime endTime,Integer pageNo,Integer pageSize,String appKey,String appSecret,String accessToken){
         String startTimeStr = startTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
         String endTimeStr = endTime.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
@@ -92,6 +107,8 @@ public class JdOrderApiHelper {
                 .GET()
                 .build();
         try {
+            // 京东官方未公开 QPS，按 erp.platform.rate-limit.jd.qps 保守兜底。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             return result;
@@ -108,51 +125,71 @@ public class JdOrderApiHelper {
      * @return
      */
     public static ApiResultVo<JdOrderListResponse> pullOrder(LocalDateTime startTime, LocalDateTime endTime, String appKey, String appSecret, String accessToken) {
-        Integer page = 1;
-        Integer pageSize = 10;
-        // 拉取接口
-        String result = pullOrder(startTime,endTime,1,pageSize,appKey,appSecret,accessToken);
-        List<JdOrderListResponse> orderList = new ArrayList<>();
-        if(StringUtils.hasText(result)) {
-            JsonNode jsonObject = JsonUtils.readTree(result);
-            if (JsonUtils.node(jsonObject, "error_response") == null) {
-//            String code=  jsonObject.getJSONObject("jingdong_pop_order_enSearch_responce").get("code").toString();
-                if ("0".equals(JsonUtils.text(JsonUtils.node(jsonObject, "jingdong_pop_order_enSearch_responce"), "code"))) {
-//                JsonNode orderResult= (JsonNode)(JsonUtils.node(jsonObject, "jingdong_pop_order_enSearch_responce")).get("searchorderinfo_result");
-//                Integer orderTotal = orderResult.getInteger("orderTotal");
-                    Integer orderTotal = JsonUtils.integer(JsonUtils.node(JsonUtils.node(jsonObject, "jingdong_pop_order_enSearch_responce"), "searchorderinfo_result"), "orderTotal");
-                    if (orderTotal != null && orderTotal > 0) {
-                        //计算分页
-                        int totalPage = (orderTotal % pageSize == 0) ? orderTotal / pageSize.intValue() : (orderTotal / pageSize.intValue()) + 1;
+        return pullOrder(startTime, endTime, appKey, appSecret, accessToken, JdOrderApiHelper::pullOrder);
+    }
 
-                        // 获取结果
-//                    JsonNode orderInfoList = orderResult.getJSONArray("orderInfoList");
-                        orderList.addAll(JsonUtils.list(JsonUtils.node(JsonUtils.node(jsonObject, "jingdong_pop_order_enSearch_responce"), "searchorderinfo_result"), "orderInfoList", JdOrderListResponse.class));
-                        if (orderTotal > pageSize) {
-                            while (totalPage > page) {
-                                page++;
-                                String result1 = pullOrder(startTime, endTime, page, pageSize, appKey, appSecret, accessToken);
-                                if (StringUtils.hasText(result1)) {
-                                    JsonNode jsonObject1 = JsonUtils.readTree(result1);
-                                    if ("0".equals(JsonUtils.text(JsonUtils.node(jsonObject1, "jingdong_pop_order_enSearch_responce"), "code"))) {
-                                        orderList.addAll(JsonUtils.list(JsonUtils.node(JsonUtils.node(jsonObject1, "jingdong_pop_order_enSearch_responce"), "searchorderinfo_result"), "orderInfoList", JdOrderListResponse.class));
-                                    }
-                                }
-                            }
-                        }
-                    }
+    /**
+     * 分页壳的正体（{@code fetcher} 只用于测试替换，见 {@link PageFetcher}）。
+     *
+     * <p>为什么空响应必须报错：内层 {@code pullOrder} 的 {@code catch (Exception e) { return ""; }}
+     * 会把限流拒绝、网络异常、签名失败统统吞成空串。如果这里再「判空跳过」，上层
+     * {@code ShopPullApiServiceImpl.pullJdOrder} 收到的是 code=0，于是记录「成功，新增0」，
+     * 操作员完全看不出这批订单需要重拉（退款/商品链路早就是「空响应=失败」，只有订单壳不一致）。
+     *
+     * <p>为什么中途某页失败要整批中止：订单落库是 upsert，中止后按同一时间窗重拉是幂等的；
+     * 悄悄少几页则会让「成功」这个结论长期失真，比整体失败难发现得多。
+     */
+    static ApiResultVo<JdOrderListResponse> pullOrder(LocalDateTime startTime, LocalDateTime endTime, String appKey, String appSecret, String accessToken, PageFetcher fetcher) {
+        int page = 1;
+        int pageSize = 10;
+        // 拉取接口
+        String result = fetcher.fetch(startTime, endTime, 1, pageSize, appKey, appSecret, accessToken);
+        List<JdOrderListResponse> orderList = new ArrayList<>();
+        if (!StringUtils.hasText(result)) {
+            return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                    "京东订单接口无响应（可能被限流或网络异常），请稍后重试");
+        }
+
+        JsonNode jsonObject = JsonUtils.readTree(result);
+        JsonNode errorResponse = JsonUtils.node(jsonObject, "error_response");
+        if (errorResponse != null) {
+            return ApiResultVo.error(ApiResultVoEnum.ParamsError, JsonUtils.text(errorResponse, "zh_desc"));
+        }
+        JsonNode response = JsonUtils.node(jsonObject, "jingdong_pop_order_enSearch_responce");
+        if (!"0".equals(JsonUtils.text(response, "code"))) {
+            return ApiResultVo.error(ApiResultVoEnum.Fail.getIndex(),
+                    "京东订单首页返回异常：" + JsonUtils.text(response, "code"));
+        }
+        Integer orderTotal = JsonUtils.integer(JsonUtils.node(response, "searchorderinfo_result"), "orderTotal");
+        // 确实没订单（code=0 且 orderTotal<=0）仍然是成功，不要为了防「静默失败」把正常空结果误判成错误
+        if (orderTotal != null && orderTotal > 0) {
+            //计算分页
+            int totalPage = (orderTotal % pageSize == 0) ? orderTotal / pageSize : (orderTotal / pageSize) + 1;
+            orderList.addAll(JsonUtils.list(JsonUtils.node(response, "searchorderinfo_result"), "orderInfoList", JdOrderListResponse.class));
+            while (totalPage > page) {
+                page++;
+                String result1 = fetcher.fetch(startTime, endTime, page, pageSize, appKey, appSecret, accessToken);
+                if (!StringUtils.hasText(result1)) {
+                    return ApiResultVo.error(ApiResultVoEnum.SystemException.getIndex(),
+                            "京东订单第" + page + "/" + totalPage + "页无响应（可能被限流或网络异常），订单拉取不完整，请重试");
                 }
-            }else {
-                return ApiResultVo.error(ApiResultVoEnum.ParamsError,JsonUtils.text(JsonUtils.node(jsonObject, "error_response"), "zh_desc"));
+                JsonNode jsonObject1 = JsonUtils.readTree(result1);
+                JsonNode response1 = JsonUtils.node(jsonObject1, "jingdong_pop_order_enSearch_responce");
+                if (!"0".equals(JsonUtils.text(response1, "code"))) {
+                    return ApiResultVo.error(ApiResultVoEnum.Fail.getIndex(),
+                            "京东订单第" + page + "/" + totalPage + "页返回异常：" + JsonUtils.text(response1, "code"));
+                }
+                orderList.addAll(JsonUtils.list(JsonUtils.node(response1, "searchorderinfo_result"), "orderInfoList", JdOrderListResponse.class));
             }
         }
-        if(!orderList.isEmpty()){
-            for (var ord:orderList) {
+
+        if (!orderList.isEmpty()) {
+            for (var ord : orderList) {
                 ord.getConsigneeInfo().setMobile(JiaMi.serialize(ord.getConsigneeInfo().getMobile()));
                 ord.getConsigneeInfo().setTelephone(JiaMi.serialize(ord.getConsigneeInfo().getTelephone()));
             }
         }
-        return ApiResultVo.success(orderList.size(),orderList);
+        return ApiResultVo.success(orderList.size(), orderList);
     }
 
     public static ApiResultVo<JdOrderDetailResponse> pullOrderDetail(Long orderId, String appKey, String appSecret, String accessToken) {
@@ -204,6 +241,7 @@ public class JdOrderApiHelper {
                 .GET()
                 .build();
         try {
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             if(StringUtils.hasText(result)) {

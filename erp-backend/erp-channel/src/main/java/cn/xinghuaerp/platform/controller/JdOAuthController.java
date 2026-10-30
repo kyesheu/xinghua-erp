@@ -3,6 +3,7 @@ package cn.xinghuaerp.platform.controller;
 import tools.jackson.databind.JsonNode;
 import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.common.AjaxResult;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.system.entity.OShopPlatform;
 import cn.xinghuaerp.platform.bo.JdTokenCreateBo;
 import cn.xinghuaerp.system.facade.OShopPlatformFacade;
@@ -50,6 +51,9 @@ public class JdOAuthController {
         String url = "https://open-oauth.jd.com/oauth2/access_token?app_key=" + platform.getAppKey() + "&app_secret=" + platform.getAppSecret() +
                 "&grant_type=authorization_code&code=" + bo.getCode();
 
+        // 这是唯一没走 OkHttpClientHelper 的京东出口，同样先向限流器申请令牌；
+        // 本方法已声明 throws IOException，超限时直接冒泡给调用方（换 token 失败要重试，不能静默成功）。
+        PlatformRateLimiter.acquire(url);
         HttpClient client = HttpClient.newBuilder().build();
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url)).header("Content-Type", "application/json").GET()

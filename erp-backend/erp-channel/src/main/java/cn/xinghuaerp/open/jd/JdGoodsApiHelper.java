@@ -7,6 +7,7 @@ import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.common.ApiResultVoEnum;
 import cn.xinghuaerp.open.jd.response.JdGoodsSkuListResponse;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,9 @@ public class JdGoodsApiHelper {
                 .GET()
                 .build();
         try {
+            // 京东官方未公开 QPS，这里按 erp.platform.rate-limit.jd.qps 的保守值兜底，
+            // 防的是多店铺并发拉取叠加；IOException 仍落进下面的 catch，行为与网络异常一致（返回空串）。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             return result;

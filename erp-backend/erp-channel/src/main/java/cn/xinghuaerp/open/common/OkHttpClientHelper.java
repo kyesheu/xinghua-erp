@@ -21,6 +21,8 @@ public class OkHttpClientHelper {
 
     // 执行 GET 请求
     public static String get(String url) throws IOException {
+        // 平台级限流统一收口在这里，49 个调用方不必各自关心配额。
+        PlatformRateLimiter.acquire(url);
         Request request = new Request.Builder().url(url).build();
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) throw new IOException("平台HTTP状态异常：" + response.code());
@@ -30,6 +32,7 @@ public class OkHttpClientHelper {
 
     // 执行 POST 请求
     public static String post(String url, String json) throws IOException {
+        PlatformRateLimiter.acquire(url);
         RequestBody body = RequestBody.create(json, MediaType.get("application/json; charset=utf-8"));
         Request request = new Request.Builder().url(url).post(body).build();
         try (Response response = client.newCall(request).execute()) {
@@ -72,6 +75,7 @@ public class OkHttpClientHelper {
      * @throws IOException
      */
     public static String postForm(String url, Map<String, String> params, Map<String, String> headers) throws IOException {
+        PlatformRateLimiter.acquire(url);
 
         FormBody.Builder formBuilder = new FormBody.Builder();
 

@@ -7,6 +7,7 @@ import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.common.ApiResultVoEnum;
 import cn.xinghuaerp.open.jd.model.WaybillAccount;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,6 +96,8 @@ public class JdWaybillAccountApiHelper {
                 .GET()
                 .build();
         try {
+            // 京东官方未公开 QPS，按 erp.platform.rate-limit.jd.qps 保守兜底。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             return result;

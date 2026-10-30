@@ -75,6 +75,32 @@ spring:
 erp:
   mq:
     enabled: ${ERP_MQ_ENABLED:false}
+  platform:
+    # 外部平台调用限流：单实例进程内、按平台一个令牌桶（见 open/common/PlatformRateLimiter）。
+    # 多实例部署时实际总速率 = 实例数 × 下列值，不是平台全局配额；要全局配额需换 Redis/库表令牌。
+    # 下列数值均【非】平台官方承诺，按各自证书/权限包的实际配额调整：
+    #   dou  抖店  ：官方最低的常用接口也有 100+ 次/秒，20 极保守，主要防多店铺并发叠加
+    #   tao  淘宝  ：官方只有日配额（100 万次/天 ≈ 11.6 次/秒），10 留余量
+    #   pdd  拼多多：社区资料 50 次/秒（非官方），取 1/5
+    #   jd   京东  ：官方未公开，社区资料「企业未买资源包 5 次/秒」（api.jdl.com 共用此桶）
+    #   kwai/xhs/wei：官方无公开配额，10 保守兜底
+    rate-limit:
+      # 单次调用最多等多久拿令牌（毫秒），超过即抛「平台调用频率超限」，由上层任务按自己的重试策略退避
+      wait-millis: 1000
+      pdd:
+        qps: 10
+      tao:
+        qps: 10
+      jd:
+        qps: 5
+      dou:
+        qps: 20
+      kwai:
+        qps: 10
+      xhs:
+        qps: 10
+      wei:
+        qps: 10
 #  kafka:
 #    bootstrap-servers: localhost:9092
 #    producer:

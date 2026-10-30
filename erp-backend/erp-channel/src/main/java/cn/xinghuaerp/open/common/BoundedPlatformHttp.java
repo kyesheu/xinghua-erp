@@ -10,6 +10,8 @@ public final class BoundedPlatformHttp {
  private BoundedPlatformHttp() {}
  private static final HttpClient CLIENT=HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
  public static HttpResponse<String> send(HttpRequest original)throws IOException,InterruptedException {
+  // 与 OkHttpClientHelper 同一套平台限流：JDK 渠道的调用方也必须吃同一个桶，否则换渠道就绕过限流。
+  PlatformRateLimiter.acquire(original.uri().toString());
   var request=HttpRequest.newBuilder(original,(name,value)->true).timeout(java.time.Duration.ofSeconds(30)).build();
   return CLIENT.send(request,info->new LimitedBody());
  }

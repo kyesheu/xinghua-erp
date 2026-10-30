@@ -3,6 +3,7 @@ package cn.xinghuaerp.open.jd;
 import cn.xinghuaerp.json.JsonUtils;
 import tools.jackson.databind.ObjectMapper;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -69,6 +70,8 @@ public class JdVcReturnApiHelper {
                 .GET()
                 .build();
         try {
+            // 京东官方未公开 QPS，按 erp.platform.rate-limit.jd.qps 保守兜底。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             /**
@@ -130,6 +133,7 @@ public class JdVcReturnApiHelper {
                 .GET()
                 .build();
         try {
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             /**

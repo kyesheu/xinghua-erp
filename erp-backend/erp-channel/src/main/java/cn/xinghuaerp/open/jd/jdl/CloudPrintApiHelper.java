@@ -5,6 +5,7 @@ import cn.xinghuaerp.json.JsonUtils;
 import cn.xinghuaerp.open.common.ApiResultVo;
 import cn.xinghuaerp.open.common.ApiResultVoEnum;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import org.springframework.util.StringUtils;
 import java.io.UnsupportedEncodingException;
@@ -103,6 +104,8 @@ public class CloudPrintApiHelper {
                 .POST(HttpRequest.BodyPublishers.ofString(jsonParams))
                 .build();
         try {
+            // 京东物流（api.jdl.com）与京东零售共用 jd 的令牌桶，按 erp.platform.rate-limit.jd.qps 兜底。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             return result;

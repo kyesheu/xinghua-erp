@@ -8,6 +8,7 @@ import cn.xinghuaerp.open.common.ApiResultVoEnum;
 import cn.xinghuaerp.open.jd.model.AfterSale;
 import cn.xinghuaerp.open.jd.model.Refund;
 import cn.xinghuaerp.open.common.DateUtil;
+import cn.xinghuaerp.open.common.PlatformRateLimiter;
 import cn.xinghuaerp.open.common.SignUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -152,6 +153,8 @@ public class JdAfterSaleApiHelper {
                 .GET()
                 .build();
         try {
+            // 京东官方未公开 QPS，按 erp.platform.rate-limit.jd.qps 保守兜底。
+            PlatformRateLimiter.acquire(url);
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
             return result;
@@ -311,6 +314,7 @@ public class JdAfterSaleApiHelper {
                 .GET()
                 .build();
         try {
+            PlatformRateLimiter.acquire(url);
             // 客户期望(10-退货 20-换货 30-维修 40-大家电安装 50-大家电移机 60-大家电增值服务 70-上门维修 90-优鲜赔 80-补发商品 100-试用收回 11-仅退款)
             HttpResponse<String> send = client.send(request, HttpResponse.BodyHandlers.ofString());
             String result = send.body();
