@@ -628,6 +628,12 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
 
         // 订单金额=商品金额+运费-手动改价-优惠折扣
         Integer orderAmount = shopOrder.getGoodsAmount() +shopOrder.getFreight()-shopOrder.getChangePrice()-shopOrder.getDiscountAmount();
+        // 线下抹零/折扣是真实业务，但优惠总额不能超过「商品金额+运费」：
+        // 否则订单金额为负，paymentAmount 跟着为负，等于平台倒欠客户钱。
+        // 只挡负数，等于 0 是允许的（全额抵扣/整单赠送这类场景）。
+        if (orderAmount < 0) {
+            return ResultVo.error("优惠金额不能超过商品金额与运费之和");
+        }
         shopOrder.setOrderAmount(orderAmount);
         // 抵扣金额
         Integer deductionPrice =order.getDeductionPrice()==null?0: order.getDeductionPrice().multiply(BigDecimal.valueOf(100)).intValue();

@@ -175,6 +175,37 @@ class ShopOrderRecoveryDeductionUnitTest {
     }
 
     @Test
+    @DisplayName("线下折扣超过商品金额+运费时拒绝建单，不产生负的订单金额")
+    void discountGreaterThanGoodsAmountIsRejected() {
+        // 线下抹零/折扣是真实业务，但优惠总额超过「商品金额+运费」会算出负的订单金额，
+        // paymentAmount 跟着为负，等于平台倒欠客户钱。这里钉住后端兜底校验。
+        var mappers = new Mappers();
+        var bo = order("100", "0", BigDecimal.ZERO, BigDecimal.ZERO);
+        bo.setDiscountAmount(new BigDecimal("150")); // 100 元的商品抹 150
+
+        var result = mappers.call(bo);
+
+        assertNotEquals(0, result.getCode(), "优惠超过商品金额必须被拒绝");
+        assertEquals("优惠金额不能超过商品金额与运费之和", result.getMsg());
+        verify(mappers.baseMapper, never()).insert(any(ShopOrder.class));
+    }
+
+    @Test
+    @DisplayName("优惠恰好等于商品金额时允许建单（应付为 0，不是负数）")
+    void discountEqualToGoodsAmountIsAllowed() {
+        var mappers = new Mappers();
+        var bo = order("100", "0", BigDecimal.ZERO, BigDecimal.ZERO);
+        bo.setDiscountAmount(new BigDecimal("100"));
+
+        var result = mappers.call(bo);
+
+        assertEquals(0, result.getCode(), "全额优惠应允许，实际返回：" + result.getMsg());
+        var captor = ArgumentCaptor.forClass(ShopOrder.class);
+        verify(mappers.baseMapper).insert(captor.capture());
+        assertEquals(0, captor.getValue().getOrderAmount(), "订单金额应为 0 而不是负数");
+    }
+
+    @Test
     @DisplayName("不同店铺的商品仍然被拦下（证明校验没有被删掉）")
     void productFromAnotherShopIsStillRejected() {
         // 店铺 1000 与商品所属店铺 2000，同样都在 Long 缓存区间之外
