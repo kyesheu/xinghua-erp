@@ -12,9 +12,6 @@
           <el-option v-for="dictItem in dict.sys_normal_disable" :key="dictItem.value" :label="dictItem.label" :value="dictItem.value" />
         </el-select>
       </el-form-item>
-      <el-form-item label="创建时间">
-        <el-date-picker v-model="dateRange" style="width: 240px" value-format="YYYY-MM-DD" type="daterange" range-separator="-" start-placeholder="开始日期" end-placeholder="结束日期" />
-      </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleQuery"><el-icon><Search /></el-icon>搜索</el-button>
         <el-button @click="resetQuery"><el-icon><Refresh /></el-icon>重置</el-button>
@@ -108,7 +105,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus, Edit, Delete, User, QuestionFilled } from '@element-plus/icons-vue'
 import { listRole, getRole, delRole, addRole, updateRole, changeRoleStatus } from '@/api/system/role'
 import { treeselect as menuTreeselect, roleMenuTreeselect } from '@/api/system/menu'
-import { parseTime, addDateRange } from '@/utils/zhijian'
+import { parseTime } from '@/utils/zhijian'
 import { useDict } from '@/composables/useDict'
 import RightToolbar from '@/components/RightToolbar/index.vue'
 import Pagination from '@/components/Pagination/index.vue'
@@ -129,7 +126,6 @@ const open = ref(false)
 const menuExpand = ref(false)
 const menuNodeAll = ref(false)
 const menuOptions = ref<any[]>([])
-const dateRange = ref<string[]>([])
 const queryFormRef = ref<FormInstance>()
 const formRef = ref<FormInstance>()
 const menuRef = ref<any>()
@@ -167,7 +163,7 @@ onMounted(() => { getList() })
 
 function getList() {
   loading.value = true
-  listRole(addDateRange({ ...queryParams }, dateRange.value)).then((res: any) => {
+  listRole({ ...queryParams }).then((res: any) => {
     roleList.value = res.rows || []
     total.value = res.total || 0
     loading.value = false
@@ -236,7 +232,6 @@ function handleQuery() {
 }
 
 function resetQuery() {
-  dateRange.value = []
   queryFormRef.value?.resetFields()
   handleQuery()
 }
