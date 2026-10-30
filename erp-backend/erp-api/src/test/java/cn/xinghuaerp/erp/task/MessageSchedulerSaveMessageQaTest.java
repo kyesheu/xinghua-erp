@@ -47,7 +47,7 @@ class MessageSchedulerSaveMessageQaTest {
     @DisplayName("新消息：插入 → 抢占 → 推送 → 条件结算，全程不再对 id 非空实体调 save")
     void newMessageIsClaimedBeforeDeliveryAndSettledConditionally() throws Exception {
         stubInsertAssignsId(88L);
-        when(messageService.claimNotify(88L, null)).thenReturn(true);
+        when(messageService.claimNotify(88L, null)).thenReturn("lease-88");
         when(notifier.notifyAll("库存不足", "SKU 只剩 1 件")).thenReturn(true);
 
         invokeSave("stock_low", "high", "库存不足", "SKU 只剩 1 件");
@@ -56,7 +56,7 @@ class MessageSchedulerSaveMessageQaTest {
         order.verify(messageService).save(any(SysMessage.class));
         order.verify(messageService).claimNotify(88L, null);
         order.verify(notifier).notifyAll("库存不足", "SKU 只剩 1 件");
-        order.verify(messageService).finishNotify(88L, 1);
+        order.verify(messageService).finishNotify(88L, 1, "lease-88");
 
         // 插入之后不得再对同一个实体整实体回写（原缺陷）：
         // 整条链路只能有一次 save，而且那一次必须发生在 id 还没生成的时候。
@@ -69,12 +69,12 @@ class MessageSchedulerSaveMessageQaTest {
     @DisplayName("抢占失败（别的实例正在发）：不推送、不结算，消息留在待推送等补偿窗口")
     void failedClaimSkipsDeliveryEntirely() throws Exception {
         stubInsertAssignsId(88L);
-        when(messageService.claimNotify(88L, null)).thenReturn(false);
+        when(messageService.claimNotify(88L, null)).thenReturn(null);
 
         invokeSave("stock_low", "high", "库存不足", "SKU 只剩 1 件");
 
         verify(notifier, never()).notifyAll(any(), any());
-        verify(messageService, never()).finishNotify(any(), anyInt());
+        verify(messageService, never()).finishNotify(any(), anyInt(), any());
         verify(messageService, times(1)).save(any(SysMessage.class));
         verify(sseService).broadcastMessage(eq("message"), any());
     }
@@ -83,12 +83,12 @@ class MessageSchedulerSaveMessageQaTest {
     @DisplayName("通道全部失败：结算为 2（推送失败），不写 is_read 之类的业务字段")
     void deliveryFailureSettlesAsFailed() throws Exception {
         stubInsertAssignsId(88L);
-        when(messageService.claimNotify(88L, null)).thenReturn(true);
+        when(messageService.claimNotify(88L, null)).thenReturn("lease-88");
         when(notifier.notifyAll(any(), any())).thenReturn(false);
 
         invokeSave("stock_low", "high", "库存不足", "SKU 只剩 1 件");
 
-        verify(messageService).finishNotify(88L, 2);
+        verify(messageService).finishNotify(88L, 2, "lease-88");
         verify(messageService, times(1)).save(any(SysMessage.class));
     }
 
@@ -101,7 +101,7 @@ class MessageSchedulerSaveMessageQaTest {
 
         verify(messageService, never()).claimNotify(any(), any());
         verify(notifier, never()).notifyAll(any(), any());
-        verify(messageService, never()).finishNotify(any(), anyInt());
+        verify(messageService, never()).finishNotify(any(), anyInt(), any());
         verify(messageService, times(1)).save(any(SysMessage.class));
     }
 

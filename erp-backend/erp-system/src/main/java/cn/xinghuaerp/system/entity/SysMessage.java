@@ -23,6 +23,8 @@ public class SysMessage {
     private Integer needNotify;
     private Integer notifyStatus;
     private LocalDateTime notifyTime;
+    /** 通知投递的租约令牌：claim 时写入，结算时按令牌匹配，用于区分“这次发送中是不是自己抢的”。 */
+    private String notifyToken;
     private LocalDateTime createdTime;
     private LocalDateTime readTime;
 }

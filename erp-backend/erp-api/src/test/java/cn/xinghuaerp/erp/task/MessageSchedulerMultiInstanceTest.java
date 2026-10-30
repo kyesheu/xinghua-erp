@@ -103,7 +103,7 @@ class MessageSchedulerMultiInstanceTest {
             this.db = new JdbcTemplate(ds);
             db.execute("CREATE TABLE sys_message(id BIGINT AUTO_INCREMENT PRIMARY KEY,dedup_key VARCHAR(128),"
                     + "type VARCHAR(32),title VARCHAR(128),content VARCHAR(512),is_read INT,need_notify INT,"
-                    + "notify_status INT,notify_time TIMESTAMP,created_time TIMESTAMP)");
+                    + "notify_status INT,notify_time TIMESTAMP,notify_token VARCHAR(36),created_time TIMESTAMP)");
             this.messageService = new SysMessageServiceImpl(mapper());
             this.brokenTitles = brokenTitles;
         }

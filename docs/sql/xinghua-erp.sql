@@ -7493,6 +7493,7 @@ CREATE TABLE `sys_message` (
   `need_notify` tinyint(1) DEFAULT 0 COMMENT '是否需要外部通知：0否 1是',
   `notify_status` tinyint DEFAULT 0 COMMENT '外部通知状态：0未推送 1已推送 2推送失败 3发送中（已被某实例抢占，用于多实例去重）',
   `notify_time` datetime DEFAULT NULL COMMENT '最近一次外部推送时间',
+  `notify_token` varchar(36) DEFAULT NULL COMMENT '投递租约令牌：抢占时写入UUID，结算时按令牌匹配，防止租约被接管后过期持有者覆盖真实结果',
   `created_time` datetime DEFAULT NULL,
   `read_time` datetime DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,

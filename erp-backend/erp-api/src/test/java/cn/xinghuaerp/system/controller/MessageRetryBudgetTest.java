@@ -42,7 +42,7 @@ class MessageRetryBudgetTest {
         var messages = mock(ISysMessageService.class);
         var notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, "标题1"), message(2L, "标题2"), message(3L, "标题3")));
-        when(messages.claimNotify(anyLong(), any())).thenReturn(true);
+        when(messages.claimNotify(anyLong(), any())).thenAnswer(call -> "lease-" + call.getArgument(0));
         when(notifier.notifyAll(any(), any())).thenAnswer(call -> {
             Thread.sleep(ONE_DELIVERY_MILLIS);
             return true;
@@ -53,11 +53,11 @@ class MessageRetryBudgetTest {
         // 只推了第一条，后两条连抢占都没做（保持 0/2/3，仍在补偿窗口内）
         verify(notifier, times(1)).notifyAll("标题1", "内容1");
         verify(messages, times(1)).claimNotify(anyLong(), any());
-        verify(messages).finishNotify(1L, 1);
+        verify(messages).finishNotify(1L, 1, "lease-1");
         verify(messages, never()).claimNotify(eq(2L), any());
         verify(messages, never()).claimNotify(eq(3L), any());
-        verify(messages, never()).finishNotify(eq(2L), anyInt());
-        verify(messages, never()).finishNotify(eq(3L), anyInt());
+        verify(messages, never()).finishNotify(eq(2L), anyInt(), any());
+        verify(messages, never()).finishNotify(eq(3L), anyInt(), any());
 
         String message = String.valueOf(result.get("msg"));
         assertTrue(message.contains("成功 1 条"), message);
@@ -72,12 +72,12 @@ class MessageRetryBudgetTest {
         var notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, "标题1"), message(2L, "标题2")));
         // 两条都被别的实例/线程抢走
-        when(messages.claimNotify(anyLong(), any())).thenReturn(false);
+        when(messages.claimNotify(anyLong(), any())).thenReturn(null);
 
         AjaxResult result = controllerWithBudget(messages, notifier).retryNotify();
 
         verify(notifier, never()).notifyAll(any(), any());
-        verify(messages, never()).finishNotify(anyLong(), anyInt());
+        verify(messages, never()).finishNotify(anyLong(), anyInt(), any());
         String message = String.valueOf(result.get("msg"));
         assertTrue(message.contains("成功 0 条"), message);
         assertTrue(message.contains("失败 0 条"), message);
@@ -90,12 +90,12 @@ class MessageRetryBudgetTest {
         var messages = mock(ISysMessageService.class);
         var notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, "标题1")));
-        when(messages.claimNotify(anyLong(), any())).thenReturn(true);
+        when(messages.claimNotify(anyLong(), any())).thenAnswer(call -> "lease-" + call.getArgument(0));
         when(notifier.notifyAll(any(), any())).thenReturn(false);
 
         AjaxResult result = controllerWithBudget(messages, notifier).retryNotify();
 
-        verify(messages).finishNotify(1L, 2);
+        verify(messages).finishNotify(1L, 2, "lease-1");
         String message = String.valueOf(result.get("msg"));
         assertTrue(message.contains("成功 0 条"), message);
         assertTrue(message.contains("失败 1 条"), message);
@@ -129,7 +129,7 @@ class MessageRetryBudgetTest {
         var messages = mock(ISysMessageService.class);
         var notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, "标题1"), message(2L, "标题2")));
-        when(messages.claimNotify(anyLong(), any())).thenReturn(true);
+        when(messages.claimNotify(anyLong(), any())).thenAnswer(call -> "lease-" + call.getArgument(0));
         when(notifier.notifyAll(any(), any())).thenReturn(true);
 
         AjaxResult result = controllerWithBudget(messages, notifier).retryNotify();

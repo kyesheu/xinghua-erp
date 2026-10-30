@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -27,7 +28,7 @@ public class SysMessageServiceImpl implements ISysMessageService {
     /**
      * 保存一条消息。<b>仅用于新建（{@code id == null}）。</b>
      *
-     * <p>已有消息的通知状态结算必须走 {@link #finishNotify(Long, int)}：本方法在 id 非空时
+     * <p>已有消息的通知状态结算必须走 {@link #finishNotify(Long, int, String)}：本方法在 id 非空时
      * 按主键整实体回写（{@code updateById}，默认 NOT_NULL 策略），会把调用方读取时的旧快照里
      * 所有非空字段（{@code is_read}、{@code title}、{@code content}、{@code dedup_key}、
      * {@code created_time} …）全部覆盖回数据库。通知推送是阻塞数秒到数十秒的调用，
@@ -107,33 +108,45 @@ public class SysMessageServiceImpl implements ISysMessageService {
     }
 
     @Override
-    public boolean claimNotify(Long id, Integer expectedNotifyStatus) {
+    public String claimNotify(Long id, Integer expectedNotifyStatus) {
         if (id == null) {
-            return false;
+            return null;
         }
         // 条件更新即幂等闸门：只有把状态从“读取时看到的值”改成“发送中”的那一次才算抢到，
         // 多实例并发时另一实例的影响行数为 0，直接跳过，不会重复触达通知渠道。
+        // 同时写入一次性租约令牌：结算必须拿同一个令牌回来。只靠“状态是发送中”做围栏挡不住
+        // “租约超时已被别人接管”的情形——那种情况下状态还是 3，过期的持有者仍能结算，
+        // 用自己那份早已过时的结果覆盖接管者的真实结果（先到者赢）。有了令牌，接管时换新令牌，
+        // 旧持有者的结算影响行数即为 0。
+        String token = UUID.randomUUID().toString();
         int expected = expectedNotifyStatus == null ? NOTIFY_STATUS_PENDING : expectedNotifyStatus;
-        return mapper.update(null, new UpdateWrapper<SysMessage>()
+        int rows = mapper.update(null, new UpdateWrapper<SysMessage>()
                 .eq("id", id)
                 .eq("notify_status", expected)
                 .set("notify_status", NOTIFY_STATUS_SENDING)
-                .set("notify_time", LocalDateTime.now())) == 1;
+                .set("notify_time", LocalDateTime.now())
+                .set("notify_token", token));
+        return rows == 1 ? token : null;
     }
 
     @Override
-    public boolean finishNotify(Long id, int notifyStatus) {
-        if (id == null) {
+    public boolean finishNotify(Long id, int notifyStatus, String token) {
+        if (id == null || token == null || token.isBlank()) {
+            // 令牌为空说明调用方没有走 claimNotify，属于编程错误；不能退化成“只按状态围栏结算”，
+            // 否则又会回到过期持有者能覆盖接管者结果的老问题。
+            log.warn("通知结果结算缺少租约令牌，已拒绝 id={} target={}", id, notifyStatus);
             return false;
         }
-        // 只结算本次投递：条件更新只 set 两个投递相关列，并带 notify_status = 发送中 的围栏。
+        // 只结算本次投递：条件更新只 set 投递相关列，围栏是「发送中 + 令牌匹配」。
         // 这样既不会覆盖投递期间用户并发写入的 is_read/read_time/title，
-        // 也不会覆盖别人接管租约后写下的结算结果（影响行数为 0）。
+        // 也不会覆盖别人接管租约后写下的结算结果（令牌已被换掉，影响行数为 0）。
         int rows = mapper.update(null, new UpdateWrapper<SysMessage>()
                 .eq("id", id)
                 .eq("notify_status", NOTIFY_STATUS_SENDING)
+                .eq("notify_token", token)
                 .set("notify_status", notifyStatus)
-                .set("notify_time", LocalDateTime.now()));
+                .set("notify_time", LocalDateTime.now())
+                .set("notify_token", null));
         if (rows == 1) {
             return true;
         }

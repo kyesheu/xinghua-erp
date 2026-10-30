@@ -74,13 +74,15 @@ public class SysMessageController {
                 continue;
             }
             // 与定时补偿共用同一把幂等闸门：抢不到投递权说明别的实例/线程正在发送，跳过而不是当失败。
-            if (!messageService.claimNotify(msg.getId(), msg.getNotifyStatus())) {
+            // 抢到时会拿到本次租约令牌，结算必须原样带回，否则过期持有者可能覆盖接管者的结果。
+            String token = messageService.claimNotify(msg.getId(), msg.getNotifyStatus());
+            if (token == null) {
                 skipped++;
                 continue;
             }
             boolean allOk = notifierService.notifyAll(msg.getTitle(), msg.getContent());
-            // 条件结算本次投递，只写 notify_status/notify_time：推送期间用户标记已读的结果不能被覆盖。
-            messageService.finishNotify(msg.getId(), allOk ? 1 : 2);
+            // 条件结算本次投递，只写投递相关列：推送期间用户标记已读的结果不能被覆盖。
+            messageService.finishNotify(msg.getId(), allOk ? 1 : 2, token);
             if (allOk) {
                 success++;
             } else {

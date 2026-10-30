@@ -47,7 +47,7 @@ class MessageRetryBudgetQaTest {
 
         verify(messages, never()).claimNotify(anyLong(), any());
         verify(notifier, never()).notifyAll(any(), any());
-        verify(messages, never()).finishNotify(anyLong(), anyInt());
+        verify(messages, never()).finishNotify(anyLong(), anyInt(), any());
         String msg = String.valueOf(result.get("msg"));
         assertTrue(msg.contains("成功 0 条") && msg.contains("失败 0 条") && msg.contains("跳过 2 条"), msg);
     }
@@ -58,7 +58,7 @@ class MessageRetryBudgetQaTest {
         ISysMessageService messages = mock(ISysMessageService.class);
         NotifierService notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, 0), message(2L, 0)));
-        when(messages.claimNotify(anyLong(), any())).thenReturn(true);
+        when(messages.claimNotify(anyLong(), any())).thenAnswer(call -> "lease-" + call.getArgument(0));
         // 第一条投递耗时远超预算：预算在 notifyAll 内部就已耗尽
         when(notifier.notifyAll(eq("标题1"), any())).thenAnswer(call -> {
             Thread.sleep(800L);
@@ -69,7 +69,7 @@ class MessageRetryBudgetQaTest {
         AjaxResult result = controller(messages, notifier, 500L).retryNotify();
 
         verify(messages, times(1)).claimNotify(1L, 0);
-        verify(messages, times(1)).finishNotify(1L, 1);
+        verify(messages, times(1)).finishNotify(1L, 1, "lease-1");
         verify(messages, never()).claimNotify(2L, 0);
         String msg = String.valueOf(result.get("msg"));
         assertTrue(msg.contains("成功 1 条") && msg.contains("跳过 1 条"), msg);
@@ -81,7 +81,7 @@ class MessageRetryBudgetQaTest {
         ISysMessageService messages = mock(ISysMessageService.class);
         NotifierService notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, 0), message(2L, 2), message(3L, 3)));
-        when(messages.claimNotify(anyLong(), any())).thenReturn(false);
+        when(messages.claimNotify(anyLong(), any())).thenReturn(null);
 
         controller(messages, notifier, 60_000L).retryNotify();
 
@@ -98,9 +98,9 @@ class MessageRetryBudgetQaTest {
         List<SysMessage> batch = List.of(message(1L, 0), message(2L, 0), message(3L, 0));
         when(messages.getFailedNotify()).thenReturn(batch);
         // 1 成功推送、2 通道返回失败、3 被别的实例抢走
-        when(messages.claimNotify(1L, 0)).thenReturn(true);
-        when(messages.claimNotify(2L, 0)).thenReturn(true);
-        when(messages.claimNotify(3L, 0)).thenReturn(false);
+        when(messages.claimNotify(1L, 0)).thenReturn("lease-1");
+        when(messages.claimNotify(2L, 0)).thenReturn("lease-2");
+        when(messages.claimNotify(3L, 0)).thenReturn(null);
         when(notifier.notifyAll("标题1", "内容1")).thenReturn(true);
         when(notifier.notifyAll("标题2", "内容2")).thenReturn(false);
 
@@ -114,8 +114,8 @@ class MessageRetryBudgetQaTest {
         assertEquals(1, success, msg);
         assertEquals(1, failure, msg);
         assertEquals(1, skipped, msg);
-        verify(messages).finishNotify(1L, 1);
-        verify(messages).finishNotify(2L, 2);
+        verify(messages).finishNotify(1L, 1, "lease-1");
+        verify(messages).finishNotify(2L, 2, "lease-2");
     }
 
     @Test
@@ -148,13 +148,13 @@ class MessageRetryBudgetQaTest {
         ISysMessageService messages = mock(ISysMessageService.class);
         NotifierService notifier = mock(NotifierService.class);
         when(messages.getFailedNotify()).thenReturn(List.of(message(1L, 0)));
-        when(messages.claimNotify(1L, 0)).thenReturn(true);
+        when(messages.claimNotify(1L, 0)).thenReturn("lease-1");
         when(notifier.notifyAll(any(), any())).thenThrow(new IllegalStateException("渠道列表读取失败"));
 
         assertThrows(IllegalStateException.class, () -> controller(messages, notifier, 60_000L).retryNotify());
 
         verify(messages).claimNotify(1L, 0);
-        verify(messages, never()).finishNotify(anyLong(), anyInt());
+        verify(messages, never()).finishNotify(anyLong(), anyInt(), any());
     }
 
     private SysMessageController controller(ISysMessageService messages, NotifierService notifier, long budget) {
