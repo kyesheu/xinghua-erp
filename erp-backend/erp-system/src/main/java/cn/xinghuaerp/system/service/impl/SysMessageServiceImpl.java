@@ -78,6 +78,16 @@ public class SysMessageServiceImpl implements ISysMessageService {
     }
 
     @Override
+    public boolean existsByDedupKey(String dedupKey) {
+        if (dedupKey == null || dedupKey.isBlank()) {
+            return false;
+        }
+        LambdaQueryWrapper<SysMessage> w = new LambdaQueryWrapper<>();
+        w.eq(SysMessage::getDedupKey, dedupKey);
+        return mapper.selectCount(w) > 0;
+    }
+
+    @Override
     public void markRead(Long id) {
         if (id == null) {
             return;

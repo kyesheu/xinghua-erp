@@ -14,7 +14,7 @@ class MessageRetryIsolationTest {
   // 补偿前先抢占投递权，本用例只验证单条异常隔离，故让抢占一律成功并给出唯一租约令牌。
   when(messages.claimNotify(any(),any())).thenAnswer(c -> "lease-" + c.getArgument(0));
   when(notifier.notifyAll("first","a")).thenThrow(new IllegalStateException("offline"));when(notifier.notifyAll("second","b")).thenReturn(true);
-  new MessageScheduler(null,null,messages,notifier,null).retryFailedNotify();
+  new MessageScheduler(null,null,messages,notifier,null,null,null).retryFailedNotify();
   // 结算必须走条件更新 finishNotify：整实体 save 会覆盖推送期间用户写入的 is_read/read_time/title。
   verify(messages,never()).save(any(SysMessage.class));
   verify(messages).finishNotify(2L,1,"lease-2");

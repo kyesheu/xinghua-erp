@@ -1,7 +1,9 @@
 package cn.xinghuaerp.erp.task;
 
+import cn.xinghuaerp.inventory.service.OGoodsInventoryService;
 import cn.xinghuaerp.order.service.OOrderService;
 import cn.xinghuaerp.order.service.ShopRefundService;
+import cn.xinghuaerp.product.service.OGoodsSkuService;
 import cn.xinghuaerp.sse.SseService;
 import cn.xinghuaerp.system.entity.SysMessage;
 import cn.xinghuaerp.system.notify.NotifierService;
@@ -41,7 +43,8 @@ class MessageSchedulerSaveMessageQaTest {
     private final NotifierService notifier = mock(NotifierService.class);
     private final SseService sseService = mock(SseService.class);
     private final MessageScheduler scheduler = new MessageScheduler(
-            mock(OOrderService.class), mock(ShopRefundService.class), messageService, notifier, sseService);
+            mock(OOrderService.class), mock(ShopRefundService.class), messageService, notifier, sseService,
+            mock(OGoodsInventoryService.class), mock(OGoodsSkuService.class));
 
     @Test
     @DisplayName("新消息：插入 → 抢占 → 推送 → 条件结算，全程不再对 id 非空实体调 save")

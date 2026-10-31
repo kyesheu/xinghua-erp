@@ -120,7 +120,7 @@ class MessageSchedulerMultiInstanceTest {
         }
 
         MessageScheduler scheduler() {
-            return new MessageScheduler(null, null, messageService, notifier(), null);
+            return new MessageScheduler(null, null, messageService, notifier(), null, null, null);
         }
 
         void seed(String title, Integer notifyStatus, LocalDateTime notifyTime, LocalDateTime createdTime) {

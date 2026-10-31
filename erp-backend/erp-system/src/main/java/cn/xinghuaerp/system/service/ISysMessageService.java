@@ -68,4 +68,10 @@ public interface ISysMessageService {
 
     /** 按标题判断消息是否已存在，供 MQ 重复投递的幂等去重。 */
     boolean existsByTitle(String title);
+
+    /**
+     * 按去重键判断消息是否已存在。写库时 {@code dedup_key} 有唯一索引，这里用于
+     * 提前短路（例如定时预警「一天一条」），避免每轮都把数据查一遍再撞索引。
+     */
+    boolean existsByDedupKey(String dedupKey);
 }
