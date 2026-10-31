@@ -38,4 +38,23 @@ public interface InventoryFacade {
     int updateOOrderStocking(OOrderStocking entity);
     java.util.List<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> listStockingBatches(com.baomidou.mybatisplus.core.conditions.Wrapper<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> wrapper);
     OOrderStockingItem getStockingItemById(java.io.Serializable id);
+
+    /**
+     * 下单前校验可用库存。{@code skuQuantities} 为「SKU ID → 需要数量」，
+     * 同一 SKU 的多行明细由调用方先合并。返回 {@code null} 表示够，否则是提示文案。
+     */
+    String checkStockAvailable(Long merchantId, java.util.Map<Long, Integer> skuQuantities);
+
+    /**
+     * 按订单锁定库存，落 {@code o_shop_order_stock_lock} 记录。
+     * 必须先 {@link #checkStockAvailable} 通过；锁的瞬间被并发订单抢走会抛异常并回滚本次全部锁定。
+     */
+    void lockStockForOrder(Long orderId, Long merchantId, java.util.Map<Long, Integer> skuQuantities,
+                           java.time.LocalDateTime expireTime);
+
+    /** 释放某订单仍在锁定中的库存（取消订单时调用），幂等。返回释放条数。 */
+    int releaseOrderStock(Long orderId);
+
+    /** 释放所有已过期的订单库存锁定，返回处理条数。定时任务兜底异常路径。 */
+    int releaseExpiredStockLocks();
 }

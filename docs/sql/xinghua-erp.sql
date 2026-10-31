@@ -7576,3 +7576,24 @@ CREATE TABLE IF NOT EXISTS ai_circuit_state (
 
 CREATE INDEX idx_ai_order_merchant_time ON o_order(merchant_id,order_time,shop_id);
 CREATE INDEX idx_ai_order_time ON o_order(order_time);
+
+-- ----------------------------
+-- 销售订单库存锁定（下单占库，取消/超时释放）
+-- 锁定动作本身落在 o_goods_inventory.locked_quantity，本表记录「哪个订单占了哪条库存多少」，
+-- 用于取消订单或过期时精确回补。
+-- ----------------------------
+CREATE TABLE IF NOT EXISTS `o_shop_order_stock_lock`  (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `order_id` bigint NOT NULL COMMENT '销售订单ID（shop_order.id）',
+  `inventory_id` bigint NOT NULL COMMENT '库存行ID（o_goods_inventory.id）',
+  `sku_id` bigint NOT NULL COMMENT '商品库SKU ID',
+  `lock_quantity` int NOT NULL COMMENT '锁定数量',
+  `status` tinyint NOT NULL DEFAULT 1 COMMENT '1-锁定中 2-已核销 3-已释放',
+  `expire_time` datetime NOT NULL COMMENT '锁定过期时间，到点由定时任务释放',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_lock_order`(`order_id`, `status`) USING BTREE,
+  INDEX `idx_lock_expire`(`status`, `expire_time`) USING BTREE,
+  INDEX `idx_lock_inventory`(`inventory_id`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '销售订单库存锁定记录' ROW_FORMAT = DYNAMIC;

@@ -40,7 +40,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import cn.xinghuaerp.order.mapper.OMarketingDiscountRuleMapper;
 import cn.xinghuaerp.order.mapper.OOrderMapper;
@@ -541,6 +543,10 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
                 }
             }
         }
+        // 释放这单占用的库存。放在状态更新之后：先落「已取消」的事实再回补库存，
+        // 反过来会出现「库存已放回但订单还是待发货」，被别的单抢走后这单又取消不了。
+        // 没锁过库存的单这里返回 0，无副作用。
+        orderStockMapper.releaseOrderStock(id);
         return ResultVo.success();
     }
 
@@ -607,6 +613,15 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             orderItem.setIsGift(item.getIsGift());
             shopOrderItemList.add(orderItem);
         }
+
+        // 锁库校验必须放在写订单之前：本方法没有全局异常处理器，校验失败只能靠 ResultVo.error
+        // 返回，而 error 不会回滚事务——插完订单再报「库存不足」会留下一条没有库存的脏单。
+        Map<Long, Integer> lockQuantities = lockQuantities(order, shop, shopOrderItemList);
+        if (!lockQuantities.isEmpty()) {
+            String shortage = orderStockMapper.checkStockAvailable(shop.getMerchantId(), lockQuantities);
+            if (shortage != null) return ResultVo.error(shortage);
+        }
+
         // 添加订单
         ShopOrder shopOrder = new ShopOrder();
         shopOrder.setMerchantId(shop.getMerchantId());
@@ -816,11 +831,32 @@ public class ShopOrderServiceImpl extends ServiceImpl<ShopOrderMapper, ShopOrder
             recoveryDeductionMapper.insert(erpRecoveryDeduction);
         }
 
-        // TODO:处理锁库
-        if(order.getIsLock()!=null&&order.getIsLock()==1){
-
+        // 锁库：可用量校验已在写订单之前完成，这里只做占用。锁定 30 分钟后过期——
+        // 行业对「待支付订单占库」的通行区间是 15~30 分钟，本系统门店单可能先锁后付款，取上限。
+        // 正常路径靠取消订单释放，异常路径靠定时任务按 expire_time 兜底，不会被永久占用。
+        if (!lockQuantities.isEmpty()) {
+            orderStockMapper.lockStockForOrder(shopOrder.getId(), shop.getMerchantId(), lockQuantities,
+                    LocalDateTime.now().plusMinutes(30));
         }
         return ResultVo.success(shopOrder.getId());
+    }
+
+    /**
+     * 把订单明细按 SKU 合并成「SKU → 需要锁定的数量」，返回空表表示本单不锁库。
+     *
+     * <p>必须合并：同一 SKU 在一个订单里出现两行时，逐行判断各自都以为库存够，合起来就超卖了。
+     * {@code erpGoodsSkuId} 为 0 或空的是「未关联商品库」的快速下单商品，本来就没有库存账，跳过。</p>
+     */
+    private Map<Long, Integer> lockQuantities(ShopOrderCreateBo order, OShop shop, List<ShopOrderItem> items) {
+        Map<Long, Integer> map = new LinkedHashMap<>();
+        if (order.getIsLock() == null || order.getIsLock() != 1) return map;
+        for (ShopOrderItem item : items) {
+            Long skuId = item.getErpGoodsSkuId();
+            Integer quantity = item.getQuantity();
+            if (skuId == null || skuId <= 0 || quantity == null || quantity <= 0) continue;
+            map.merge(skuId, quantity, Integer::sum);
+        }
+        return map;
     }
 
     @Transactional(rollbackFor = Exception.class)

@@ -58,4 +58,30 @@ public class InventoryFacadeImpl implements InventoryFacade {
     private cn.xinghuaerp.inventory.mapper.OOrderStockingItemBatchMapper stockingBatchMapper;
     @Override public java.util.List<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> listStockingBatches(com.baomidou.mybatisplus.core.conditions.Wrapper<cn.xinghuaerp.inventory.entity.OOrderStockingItemBatch> wrapper) { return stockingBatchMapper.selectList(wrapper); }
     @Override public OOrderStockingItem getStockingItemById(java.io.Serializable id) { return oOrderStockingItemMapper.selectById(id); }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private cn.xinghuaerp.inventory.service.ShopOrderStockLockService shopOrderStockLockService;
+
+    @Override
+    public String checkStockAvailable(Long merchantId, java.util.Map<Long, Integer> skuQuantities) {
+        if (skuQuantities == null || skuQuantities.isEmpty()) return null;
+        return shopOrderStockLockService.checkAvailable(merchantId, skuQuantities);
+    }
+
+    @Override
+    public void lockStockForOrder(Long orderId, Long merchantId, java.util.Map<Long, Integer> skuQuantities,
+                                  java.time.LocalDateTime expireTime) {
+        if (skuQuantities == null || skuQuantities.isEmpty()) return;
+        shopOrderStockLockService.lockForOrder(orderId, merchantId, skuQuantities, expireTime);
+    }
+
+    @Override
+    public int releaseOrderStock(Long orderId) {
+        return shopOrderStockLockService.releaseForOrder(orderId);
+    }
+
+    @Override
+    public int releaseExpiredStockLocks() {
+        return shopOrderStockLockService.releaseExpired();
+    }
 }
